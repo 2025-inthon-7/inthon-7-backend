@@ -680,6 +680,27 @@ def like_question(request, question_id: int):
 
 
 @extend_schema(
+    request=None,
+    responses=QuestionSerializer,
+)
+@api_view(["POST"])
+def answer_question_by_professor(request, question_id: int):
+    """
+    교수: 질문에 '답변 완료'로 상태 변경
+
+    Path parameters:
+    - `id` (integer): Question ID
+    """
+    question = get_object_or_404(Question, id=question_id)
+
+    question.status = Question.Status.PROFESSOR_ANSWERED
+    question.save(update_fields=["status"])
+
+    response_serializer = QuestionSerializer(question)
+    return Response(response_serializer.data)
+
+
+@extend_schema(
     responses=QuestionSerializer(many=True),
 )
 @api_view(["GET"])

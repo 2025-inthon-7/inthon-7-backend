@@ -54,6 +54,11 @@ urlpatterns = [
         name="like_question",
     ),
     path(
+        "questions/<int:question_id>/answer/",
+        views.answer_question_by_professor,
+        name="answer_question_by_professor",
+    ),
+    path(
         "sessions/<uuid:session_id>/questions/",
         views.list_session_questions,
         name="list_session_questions",

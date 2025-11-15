@@ -87,7 +87,8 @@ class Question(models.Model):
         TEXT_SUBMITTED = "TEXT_SUBMITTED", "Text submitted & cleaned"
         AI_ANSWERED = "AI_ANSWERED", "AI answered"
         FORWARDED = "FORWARDED", "Forwarded to professor"
-    
+        PROFESSOR_ANSWERED = "PROFESSOR_ANSWERED", "Professor answered"
+
     session = models.ForeignKey(Session, on_delete=models.CASCADE)
     device_hash = models.CharField(max_length=64)
     original_text = models.TextField()
