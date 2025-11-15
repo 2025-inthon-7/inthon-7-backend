@@ -109,6 +109,19 @@ class SessionConsumer(AsyncWebsocketConsumer):
             }
         )
 
+    async def question_capture(self, event: Dict[str, Any]) -> None:
+        """
+        교수 쪽에서 특정 질문에 대한 PPT 캡처를 업로드했을 때.
+        student 그룹에 브로드캐스트.
+        """
+        await self.send_json(
+            {
+                "event": "question_capture",
+                "question_id": event.get("question_id"),
+                "capture_url": event.get("capture_url"),
+            }
+        )
+
     async def important_message(self, event: Dict[str, Any]) -> None:
         """
         교수의 '중요해요' 표시 → 학생에게만 브로드캐스트.

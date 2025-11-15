@@ -284,6 +284,17 @@ def upload_question_capture(request, question_id: int):
     capture_url = moment.screenshot_image.url
 
 
+    # 학생 그룹 WebSocket으로도 브로드캐스트
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        get_session_group_name(session.id, "student"),
+        {
+            "type": "question_capture",
+            "question_id": question.id,
+            "capture_url": capture_url,
+        },
+    )
+
     return Response(
         {"question_id": question.id, "capture_url": capture_url},
         status=status.HTTP_201_CREATED,
