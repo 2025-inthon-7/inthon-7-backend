@@ -111,6 +111,16 @@ SUMMARIZE_LECTURE_USER_TEMPLATE = """다음 강의 내용을 요약해주세요:
 
 구조화된 형태로 명확하게 작성해주세요."""
 
+#이미지 요약 프롬프트
+SUMMARIZE_IMAGE_SYSTEM_PROMPT_TEMPLATE = """당신은 강의 화면 이미지를 분석하고 요약하는 전문가입니다.
+교수님이 중요하다고 마크한 화면 이미지를 분석하여 핵심 내용을 1줄로 요약해야 합니다.
+{subject_section}이미지에 표시된 강의 내용, 코드, 수식, 화면 내용 등을 정확하게 파악하여 간결하고 명확하게 요약하세요."""
+
+SUMMARIZE_IMAGE_USER_TEMPLATE = """제공된 교수님 화면 캡쳐 이미지를 분석하여 1줄로 요약해주세요.
+
+이미지에 표시된 강의 내용, 코드, 수식, 화면 내용 등을 정확하게 파악하여 핵심 내용만 간결하게 1줄로 요약하세요.
+추가 설명이나 형식 없이 요약 내용만 반환해주세요."""
+
 #교수 빙의 프롬프트 템플릿
 ANSWER_QUESTION_SYSTEM_PROMPT_TEMPLATE = """당신은 경험이 풍부하고 친절한 대학교수입니다.
 {subject_section}당신은 이 과목의 전문가이며, 학생들의 질문에 대해 명확하고 교육적으로 답변해야 합니다.
@@ -242,6 +252,35 @@ def get_summarize_lecture_prompt(lecture_content: str) -> tuple[str, str]:
     return (
         SUMMARIZE_LECTURE_SYSTEM_PROMPT,
         SUMMARIZE_LECTURE_USER_TEMPLATE.format(lecture_content=lecture_content),
+    )
+
+
+def get_summarize_image_prompt(subject_name: Optional[str] = None) -> tuple[str, str]:
+    """
+    이미지 요약 프롬프트 생성
+
+    Args:
+        subject_name: 과목명 (예: "자료구조", "알고리즘" 등) (선택)
+
+    Returns:
+        (system_prompt, user_prompt) 튜플
+    """
+    # 과목 정보 섹션 생성
+    subject_info = get_subject_info(subject_name)
+    if subject_info:
+        subject_section = f"강의 과목 정보:\n{subject_info}\n\n"
+    else:
+        subject_section = ""
+
+    system_prompt = SUMMARIZE_IMAGE_SYSTEM_PROMPT_TEMPLATE.format(
+        subject_section=subject_section
+    )
+
+    user_prompt = SUMMARIZE_IMAGE_USER_TEMPLATE
+
+    return (
+        system_prompt,
+        user_prompt,
     )
 
 
