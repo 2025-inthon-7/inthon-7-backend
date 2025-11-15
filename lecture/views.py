@@ -4,46 +4,48 @@ import json
 import logging
 from datetime import timedelta
 from uuid import UUID
+
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from rest_framework import status
-from rest_framework.decorators import api_view, parser_classes
-from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.response import Response
 from drf_spectacular.utils import (
     OpenApiResponse,
     extend_schema,
 )
-from .ai.clean import clean_question
-from .ai.answer import answer_question
-from .ai.summarize_image import summarize_image as summarize_important_image
+from rest_framework import status
+from rest_framework.decorators import api_view, parser_classes
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.response import Response
 
+from .ai.answer import answer_question
+from .ai.clean import clean_question
+from .ai.summarize_image import summarize_image as summarize_important_image
+from .tasks import generate_important_summary_task
 from .models import (
     Course,
-    Session,
     FeedbackEvent,
-    Question,
     ImportantMoment,
+    Question,
+    Session,
 )
 from .serializers import (
-    CourseSerializer,
-    SessionSerializer,
-    QuestionSerializer,
-    FeedbackSubmitSerializer,
-    SimpleStatusResponseSerializer,
-    QuestionIntentResponseSerializer,
-    QuestionCaptureResponseSerializer,
-    QuestionCaptureUploadSerializer,
-    QuestionTextSubmitSerializer,
-    QuestionTextResponseSerializer,
-    QuestionOverrideRequestSerializer,
     AIAnswerResponseSerializer,
+    CourseSerializer,
+    FeedbackSubmitSerializer,
     HardThresholdCaptureResponseSerializer,
     HardThresholdCaptureUploadSerializer,
     MarkImportantUploadSerializer,
+    QuestionCaptureResponseSerializer,
+    QuestionCaptureUploadSerializer,
+    QuestionIntentResponseSerializer,
+    QuestionOverrideRequestSerializer,
+    QuestionSerializer,
+    QuestionTextResponseSerializer,
+    QuestionTextSubmitSerializer,
+    SessionSerializer,
     SessionSummarySerializer,
+    SimpleStatusResponseSerializer,
 )
 
 
@@ -670,61 +672,28 @@ def mark_important(request, session_id: UUID):
         moment.id,
         capture_url,
     )
-
-    # -----------------------------
-    # 이미지 기반 1줄 요약 생성 (동기 처리)
-    # -----------------------------
-    auto_summary: str | None = None
-    if screenshot and getattr(moment, "screenshot_image", None):
-        image_url = getattr(moment.screenshot_image, "url", None)
-        logger.info(
-            "[AI DEBUG] mark_important before ai_summarize_important_image image_url=%s",
-            image_url,
-        )
-        auto_summary = ai_summarize_important_image(
-            image_path=image_url,
-            subject_name=session.course.code[:7],
-        )
-    else:
-        logger.info(
-            "[AI DEBUG] mark_important: skipping ai_summarize_important_image "
-            "screenshot_exists=%s moment_has_image=%s",
-            bool(screenshot),
-            bool(getattr(moment, "screenshot_image", None)),
-        )
-
-    # note와 자동 요약 결합 로직
-    if raw_note and auto_summary:
-        final_note = f"{raw_note} | {auto_summary}"
-    elif auto_summary:
-        final_note = auto_summary
-    else:
-        final_note = raw_note
-
-    logger.info(
-        "[AI DEBUG] mark_important final_note decided auto_summary_present=%s final_note=%r",
-        bool(auto_summary),
-        final_note,
-    )
-
-    if final_note != moment.note:
-        moment.note = final_note
-        moment.save(update_fields=["note"])
-
-    # 학생 그룹에만 브로드캐스트
+    
+    # 학생 그룹에  브로드캐스트
     channel_layer = get_channel_layer()
     async_to_sync(channel_layer.group_send)(
         get_session_group_name(session_id, "student"),
         {
             "type": "important_message",
-            "note": final_note,
+            "note": raw_note,
             "capture_url": capture_url,
             "created_at": moment.created_at.isoformat(),
         },
     )
 
+    # Celery 비동기 작업으로 요약 생성 및 note 업데이트만 수행
+    generate_important_summary_task.delay(
+        moment_id=moment.id,
+        session_id_str=str(session_id),
+        raw_note=raw_note,
+    )
+
     return Response(
-        {"id": moment.id, "note": final_note, "capture_url": capture_url},
+        {"id": moment.id, "note": raw_note, "capture_url": capture_url},
         status=status.HTTP_201_CREATED,
     )
 

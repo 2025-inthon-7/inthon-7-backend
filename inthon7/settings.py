@@ -160,6 +160,13 @@ CHANNEL_LAYERS = {
     }
 }
 
+# Celery 설정 (Redis를 브로커/결과 백엔드로 사용)
+CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", REDIS_URL)
+CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", REDIS_URL)
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+
 GS_BUCKET_NAME = "inthon7-bucket"
 
 # 서비스 계정 키 경로를 환경변수(.env)에서 가져와 설정
