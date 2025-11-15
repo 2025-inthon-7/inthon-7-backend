@@ -8,7 +8,8 @@ from channels.layers import get_channel_layer
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, parser_classes
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from drf_spectacular.utils import (
     OpenApiResponse,
@@ -32,11 +33,14 @@ from .serializers import (
     SimpleStatusResponseSerializer,
     QuestionIntentResponseSerializer,
     QuestionCaptureResponseSerializer,
+    QuestionCaptureUploadSerializer,
     QuestionTextSubmitSerializer,
     QuestionTextResponseSerializer,
     QuestionOverrideRequestSerializer,
     AIAnswerResponseSerializer,
     HardThresholdCaptureResponseSerializer,
+    HardThresholdCaptureUploadSerializer,
+    MarkImportantUploadSerializer,
     SessionSummarySerializer,
 )
 
@@ -78,7 +82,11 @@ def get_session_group_name(session_id: UUID | str, role: str) -> str:
 
 
 # AI 헬퍼 함수
-def ai_clean_question(original_text: str, screenshot_url: str | None = None) -> str:
+def ai_clean_question(
+    original_text: str,
+    screenshot_url: str | None = None,
+    subject_name: str | None = None,
+) -> str:
     """
     텍스트 + (옵션) PPT 캡처 기반으로 질문을 정제.
 
@@ -88,16 +96,21 @@ def ai_clean_question(original_text: str, screenshot_url: str | None = None) -> 
         cleaned = clean_question(
             question=original_text,
             image_path=screenshot_url,
-            subject_name=None,  # 필요하면 session.course.name 등을 넘겨서 튜닝 가능
+            subject_name=subject_name,
             temperature=0.3,
         )
         return cleaned
-    except Exception:
-        # TODO: logger 사용 시 예외 로깅 추가
+    except Exception as e:
+        # TODO: print 대신 logger 사용
+        print(f"Error in ai_clean_question: {e}")
         return original_text.strip()
 
 
-def ai_answer_question(cleaned_text: str, screenshot_url: str | None = None) -> str:
+def ai_answer_question(
+    cleaned_text: str,
+    screenshot_url: str | None = None,
+    subject_name: str | None = None,
+) -> str:
     """
     정제된 질문 + (옵션) PPT 캡처 기반으로 답변.
 
@@ -108,12 +121,13 @@ def ai_answer_question(cleaned_text: str, screenshot_url: str | None = None) -> 
             question=cleaned_text,
             lecture_context=None,  # 나중에 세션 요약/중요 구간 등을 넣어 맥락 풍부화 가능
             image_path=screenshot_url,
-            subject_name=None,
+            subject_name=subject_name,
             temperature=0.7,
         )
         return answer
-    except Exception:
-        # TODO: logger 사용 시 예외 로깅 추가
+    except Exception as e:
+        # TODO: print 대신 logger 사용
+        print(f"Error in ai_answer_question: {e}")
         return "AI 조교가 현재 답변을 생성할 수 없습니다. 잠시 후 다시 시도해 주세요."
 
 
@@ -143,7 +157,7 @@ def get_today_session(request, course_code: str):
     교수/학생 공통: 오늘 세션 가져오기 (없으면 생성)
 
     Path parameters:
-    - `code` (string): 과목 코드, 예: "CS101"
+    - `code` (string): 과목 코드-분반, 예: "COSE101-01"
     """
     session = get_or_create_today_session_by_course_code(course_code)
     data = SessionSerializer(session).data
@@ -270,10 +284,11 @@ def start_question_intent(request, session_id: UUID):
     )
 
 @extend_schema(
-    request=None,
+    request=QuestionCaptureUploadSerializer,
     responses=QuestionCaptureResponseSerializer,
 )
 @api_view(["POST"])
+@parser_classes([MultiPartParser, FormParser])
 def upload_question_capture(request, question_id: int):
     """
     교수: question_intent를 받고 PPT 화면을 캡처해서 업로드.
@@ -306,6 +321,12 @@ def upload_question_capture(request, question_id: int):
     )
 
     capture_url = moment.screenshot_image.url
+    print(
+        "[DEBUG] upload_question_capture saved:",
+        moment.screenshot_image.name,
+        "->",
+        capture_url,
+    )
 
 
     # 학생 그룹 WebSocket으로도 브로드캐스트
@@ -375,7 +396,11 @@ def submit_question_text(request, question_id: int):
     )
 
     # clean만 수행 (이미지까지 같이 줌)
-    cleaned = ai_clean_question(original_text, screenshot_url)
+    cleaned = ai_clean_question(
+        original_text,
+        screenshot_url,
+        subject_name=question.session.course.code[:7],
+    )
     question.cleaned_text = cleaned
     question.status = Question.Status.TEXT_SUBMITTED
     question.save(update_fields=["original_text", "cleaned_text", "status"])
@@ -440,7 +465,11 @@ def request_ai_answer(request, question_id: int):
     )
 
     # AI 답변 호출
-    answer = ai_answer_question(cleaned_for_answer, screenshot_url)
+    answer = ai_answer_question(
+        cleaned_for_answer,
+        screenshot_url,
+        subject_name=question.session.course.code[:7],
+    )
 
     # DB 업데이트: cleaned_text도 override_cleaned가 있으면 갱신
     question.cleaned_text = cleaned_for_answer
@@ -552,10 +581,11 @@ def list_session_questions(request, session_id: UUID):
 # ------------------------
 
 @extend_schema(
-    request=None,
+    request=MarkImportantUploadSerializer,
     responses=QuestionCaptureResponseSerializer,
 )
 @api_view(["POST"])
+@parser_classes([MultiPartParser, FormParser])
 def mark_important(request, session_id: UUID):
     """
     교수: '중요해요' + PPT 캡쳐
@@ -584,6 +614,13 @@ def mark_important(request, session_id: UUID):
     )
 
     capture_url = moment.screenshot_image.url if screenshot else None
+    if screenshot:
+        print(
+            "[DEBUG] mark_important saved:",
+            moment.screenshot_image.name,
+            "->",
+            capture_url,
+        )
 
     # 학생 그룹에만 브로드캐스트
     channel_layer = get_channel_layer()
@@ -604,10 +641,11 @@ def mark_important(request, session_id: UUID):
 
 
 @extend_schema(
-    request=None,
+    request=HardThresholdCaptureUploadSerializer,
     responses=HardThresholdCaptureResponseSerializer,
 )
 @api_view(["POST"])
+@parser_classes([MultiPartParser, FormParser])
 def hard_threshold_capture(request, session_id: UUID):
     """
     교수(프론트): HARD가 threshold 넘었다고 판단했을 때
@@ -641,6 +679,12 @@ def hard_threshold_capture(request, session_id: UUID):
     )
 
     capture_url = moment.screenshot_image.url
+    print(
+        "[DEBUG] hard_threshold_capture saved:",
+        moment.screenshot_image.name,
+        "->",
+        capture_url,
+    )
     channel_layer = get_channel_layer()
     payload = {
         "type": "hard_alert",

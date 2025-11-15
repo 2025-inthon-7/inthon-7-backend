@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 import os
+from google.oauth2 import service_account
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -138,12 +139,48 @@ CHANNEL_LAYERS = {
     }
 }
 
-GS_BUCKET_NAME = "infotech-ta-assistant-media"
+GS_BUCKET_NAME = "inthon7-bucket"
 
-DEFAULT_FILE_STORAGE = "storages.backends.gcloud.GoogleCloudStorage"
-GS_DEFAULT_BUCKET_NAME = GS_BUCKET_NAME
+# 서비스 계정 키 경로를 환경변수(.env)에서 가져와 설정
+# - 기본: GCS_CREDENTIALS_FILE
+# - 혹은 표준 GOOGLE_APPLICATION_CREDENTIALS 사용
+GCS_CREDENTIAL_FILE = (
+    os.environ.get("GCS_CREDENTIALS_FILE")
+    or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+)
 
+GS_CREDENTIALS = None
+if GCS_CREDENTIAL_FILE:
+    try:
+        GS_CREDENTIALS = service_account.Credentials.from_service_account_file(
+            GCS_CREDENTIAL_FILE
+        )
+    except Exception as e:
+        # dev 환경에서 경로가 잘못돼도 전체 서버가 죽지 않도록 하고,
+        # GCS 라이브러리의 기본 credential 검색 로직에 맡긴다.
+        print(f"[WARN] Failed to load GCS credentials from {GCS_CREDENTIAL_FILE}: {e}")
+
+# Django 5 방식의 STORAGES 설정 (기본 파일 저장소를 GCS로 설정)
+STORAGES = {
+    "default": {
+        "BACKEND": "storages.backends.gcloud.GoogleCloudStorage",
+        "OPTIONS": {
+            "bucket_name": GS_BUCKET_NAME,
+            **({"credentials": GS_CREDENTIALS} if GS_CREDENTIALS else {}),
+        },
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
+
+# 업로드된 미디어 파일 URL (GCS 공개 버킷 기준)
 MEDIA_URL = f"https://storage.googleapis.com/{GS_BUCKET_NAME}/"
+
+# 새로 업로드되는 객체를 공개 읽기 권한으로 만들고,
+# URL에 서명 쿼리스트링을 붙이지 않도록 설정
+GS_DEFAULT_ACL = "publicRead"
+GS_QUERYSTRING_AUTH = False
 
 # Django REST framework / OpenAPI 설정
 REST_FRAMEWORK = {

@@ -1,5 +1,30 @@
 from django.db import models
 import uuid
+import os
+
+
+def important_moment_screenshot_upload_path(instance, filename: str) -> str:
+    """
+    ImportantMoment 스크린샷 업로드 경로.
+
+    - Session별로 하위 폴더를 나누어 관리하고
+    - 파일명은 UUID 기반의 짧고 안전한 이름으로 통일.
+    """
+
+    _, ext = os.path.splitext(filename)
+    ext = ext.lstrip(".") or "png"
+
+    # Session별로 폴더 분리 (UUID → hex 문자열)
+    session_id = getattr(instance, "session_id", None)
+    if session_id is not None:
+        try:
+            session_str = session_id.hex if hasattr(session_id, "hex") else str(session_id)
+        except Exception:
+            session_str = str(session_id)
+    else:
+        session_str = "unknown-session"
+
+    return f"screenshots/{session_str}/{uuid.uuid4().hex}.{ext}"
 
 
 class Course(models.Model):
@@ -91,5 +116,7 @@ class ImportantMoment(models.Model):
     trigger = models.CharField(max_length=20, choices=TRIGGER_CHOICES)
     question = models.ForeignKey(Question, null=True, blank=True, on_delete=models.SET_NULL)
     note = models.CharField(max_length=200, blank=True)
-    screenshot_image = models.ImageField(upload_to='screenshots/', null=True, blank=True)
+    screenshot_image = models.ImageField(
+        upload_to=important_moment_screenshot_upload_path, null=True, blank=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)

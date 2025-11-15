@@ -1,5 +1,6 @@
 # lecture/serializers.py
 from rest_framework import serializers
+from drf_spectacular.utils import OpenApiTypes, extend_schema_field
 from .models import Course, Session, Question, ImportantMoment
 
 
@@ -76,6 +77,23 @@ class QuestionCaptureResponseSerializer(serializers.Serializer):
     capture_url = serializers.CharField()
 
 
+@extend_schema_field(OpenApiTypes.BINARY)
+class UploadImageField(serializers.ImageField):
+    """
+    drf-spectacular에서 요청 바디를 파일 업로드(binary)로 인식시키기 위한 ImageField 래퍼.
+    """
+
+    pass
+
+
+class QuestionCaptureUploadSerializer(serializers.Serializer):
+    """
+    질문 캡처 업로드용 multipart/form-data 스키마
+    """
+
+    screenshot = UploadImageField()
+
+
 class QuestionTextSubmitSerializer(serializers.Serializer):
     original_text = serializers.CharField()
 
@@ -104,10 +122,27 @@ class ImportantMomentSimpleSerializer(serializers.Serializer):
     capture_url = serializers.CharField(allow_null=True)
 
 
+class MarkImportantUploadSerializer(serializers.Serializer):
+    """
+    '중요해요' 수동 캡처용 multipart/form-data 스키마
+    """
+
+    note = serializers.CharField(required=False, allow_blank=True)
+    screenshot = UploadImageField(required=False)
+
+
 class HardThresholdCaptureResponseSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     capture_url = serializers.CharField()
     hard_ratio = serializers.CharField(allow_null=True)
+
+
+class HardThresholdCaptureUploadSerializer(serializers.Serializer):
+    """
+    HARD threshold 캡처용 multipart/form-data 스키마
+    """
+
+    screenshot = UploadImageField()
 
 
 class SessionSummaryMomentSerializer(serializers.Serializer):
