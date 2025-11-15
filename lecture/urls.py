@@ -10,6 +10,11 @@ urlpatterns = [
         name="get_today_session",
     ),
     path(
+        "courses/<str:course_code>/previous-session/",
+        views.get_previous_sessions,
+        name="get_previous_sessions",
+    ),
+    path(
         "sessions/<uuid:session_id>/end/",
         views.end_session,
         name="end_session",

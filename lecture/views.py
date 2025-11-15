@@ -214,6 +214,22 @@ def get_today_session(request, course_code: str):
 
 
 @extend_schema(
+    responses=SessionSerializer(many=True),
+)
+@api_view(["GET"])
+def get_previous_sessions(request, course_code: str):
+    """
+    학생: 지난 세션 목록
+    - is_active=False 인 세션들을
+    - 최신순으로 정렬해서 반환
+    """
+    course = get_object_or_404(Course, code=course_code)
+    sessions = Session.objects.filter(course=course, is_active=False).order_by("-date")
+    serializer = SessionSerializer(sessions, many=True)
+    return Response(serializer.data)
+
+
+@extend_schema(
     request=None,
     responses=SimpleStatusResponseSerializer,
 )
