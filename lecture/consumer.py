@@ -5,10 +5,11 @@ from typing import Any, Dict
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.conf import settings
+from django.utils import timezone
 
 try:
     import redis.asyncio as redis  # type: ignore
-except Exception:  # pragma: no cover - 개발 환경에서 redis 미설치 대비
+except Exception:
     redis = None
 
 
@@ -119,16 +120,16 @@ class SessionConsumer(AsyncWebsocketConsumer):
 
     async def new_question(self, event: Dict[str, Any]) -> None:
         """
-        교수에게 전달된 '정제된 질문 + AI 답변 + 캡처' 알림.
+        교수에게 전달된 '정제된 질문 + 캡처' 알림.
         teacher 그룹에 보내기
         """
         await self.send_json(
             {
                 "event": "new_question",
                 "question_id": event.get("question_id"),
-                "text": event.get("text"),
-                "ai_answer": event.get("ai_answer"),
+                "cleaned_text": event.get("cleaned_text"),
                 "capture_url": event.get("capture_url"),
+                "created_at": event.get("created_at"),
             }
         )
 
@@ -142,6 +143,7 @@ class SessionConsumer(AsyncWebsocketConsumer):
                 "event": "question_capture",
                 "question_id": event.get("question_id"),
                 "capture_url": event.get("capture_url"),
+                "created_at": event.get("created_at"),
             }
         )
 
@@ -155,6 +157,7 @@ class SessionConsumer(AsyncWebsocketConsumer):
                 "event": "important",
                 "note": event.get("note"),
                 "capture_url": event.get("capture_url"),
+                "created_at": event.get("created_at"),
             }
         )
 
@@ -168,6 +171,7 @@ class SessionConsumer(AsyncWebsocketConsumer):
                 "event": "hard_alert",
                 "capture_url": event.get("capture_url"),
                 "hard_ratio": event.get("hard_ratio"),
+                "created_at": event.get("created_at"),
             }
         )
 
@@ -238,6 +242,7 @@ class SessionConsumer(AsyncWebsocketConsumer):
             {
                 "type": "teacher_presence",
                 "is_online": is_online,
+                "changed_at": timezone.now().isoformat(),
             },
         )
 
@@ -249,5 +254,6 @@ class SessionConsumer(AsyncWebsocketConsumer):
             {
                 "event": "teacher_presence",
                 "is_online": event.get("is_online", False),
+                "changed_at": event.get("changed_at"),
             }
         )

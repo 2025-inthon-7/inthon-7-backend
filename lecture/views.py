@@ -32,7 +32,7 @@ from .serializers import (
     QuestionCaptureResponseSerializer,
     QuestionTextSubmitSerializer,
     QuestionTextResponseSerializer,
-    AIAnswerRequestSerializer,
+    QuestionOverrideRequestSerializer,
     AIAnswerResponseSerializer,
     HardThresholdCaptureResponseSerializer,
     SessionSummarySerializer,
@@ -292,6 +292,7 @@ def upload_question_capture(request, question_id: int):
             "type": "question_capture",
             "question_id": question.id,
             "capture_url": capture_url,
+            "created_at": moment.created_at.isoformat(),
         },
     )
 
@@ -366,7 +367,7 @@ def submit_question_text(request, question_id: int):
     )
 
 @extend_schema(
-    request=AIAnswerRequestSerializer,
+    request=QuestionOverrideRequestSerializer,
     responses={
         200: AIAnswerResponseSerializer,
         403: OpenApiResponse(description="Invalid device."),
@@ -435,7 +436,7 @@ def request_ai_answer(request, question_id: int):
 
 
 @extend_schema(
-    request=None,
+    request=QuestionOverrideRequestSerializer,
     responses=SimpleStatusResponseSerializer,
 )
 @api_view(["POST"])
@@ -447,12 +448,12 @@ def forward_question_to_professor(request, question_id: int):
     - `id` (integer): Question ID
 
     Request body:
-    - 없음
+    - override_cleaned_text (string, optional): 교수에게 전달할 정제 텍스트를 덮어쓰고 싶을 때
     """
     question = get_object_or_404(Question, id=question_id)
-    question.forwarded_to_professor = True
-    question.status = Question.Status.FORWARDED
-    question.save(update_fields=["forwarded_to_professor", "status"])
+
+    # 학생이 수정한 clean 버전을 교수에게 바로 보내고 싶을 때 사용
+    override_cleaned = request.data.get("override_cleaned_text")
 
     # 캡처 URL
     moment = (
@@ -460,7 +461,25 @@ def forward_question_to_professor(request, question_id: int):
         .order_by("-created_at")
         .first()
     )
-    capture_url = moment.screenshot_image.url if moment and moment.screenshot_image else None
+    screenshot_url = (
+        moment.screenshot_image.url if moment and moment.screenshot_image else None
+    )
+
+    # request_ai_answer와 동일한 로직으로 cleaned_for_answer 결정
+    if override_cleaned:
+        cleaned_for_answer = override_cleaned.strip()
+    elif question.cleaned_text:
+        cleaned_for_answer = question.cleaned_text
+    else:
+        cleaned_for_answer = question.original_text
+
+    # override가 있으면 DB의 cleaned_text도 함께 갱신
+    if override_cleaned:
+        question.cleaned_text = cleaned_for_answer
+
+    question.forwarded_to_professor = True
+    question.status = Question.Status.FORWARDED
+    question.save()
 
     # 교수 그룹 WebSocket으로 알림
     channel_layer = get_channel_layer()
@@ -469,9 +488,9 @@ def forward_question_to_professor(request, question_id: int):
         {
             "type": "new_question",
             "question_id": question.id,
-            "text": question.cleaned_text or question.original_text,
-            "ai_answer": question.ai_answer,
-            "capture_url": capture_url,
+            "cleaned_text": cleaned_for_answer,
+            "capture_url": screenshot_url,
+            "created_at": question.updated_at.isoformat(),
         },
     )
 
@@ -550,6 +569,7 @@ def mark_important(request, session_id: UUID):
             "type": "important_message",
             "note": note,
             "capture_url": capture_url,
+            "created_at": moment.created_at.isoformat(),
         },
     )
 
@@ -601,6 +621,7 @@ def hard_threshold_capture(request, session_id: UUID):
     payload = {
         "type": "hard_alert",
         "capture_url": capture_url,
+        "created_at": moment.created_at.isoformat(),
     }
 
     # 학생 + 교수 둘 다에게 알림

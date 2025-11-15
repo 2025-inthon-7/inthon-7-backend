@@ -87,7 +87,7 @@ class QuestionTextResponseSerializer(serializers.Serializer):
     capture_url = serializers.CharField(allow_null=True)
 
 
-class AIAnswerRequestSerializer(serializers.Serializer):
+class QuestionOverrideRequestSerializer(serializers.Serializer):
     override_cleaned_text = serializers.CharField(required=False, allow_blank=True)
 
 
