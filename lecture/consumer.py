@@ -57,12 +57,15 @@ class SessionConsumer(AsyncWebsocketConsumer):
         if self.role == "student":
             teacher_online = await self._is_teacher_online()
 
+        is_active = await self._get_session_is_active()
+
         await self.send_json(
             {
                 "event": "connected",
                 "session_id": self.session_id,
                 "role": self.role,
                 "teacher_online": teacher_online,
+                "is_active": is_active,
             }
         )
 
@@ -225,6 +228,14 @@ class SessionConsumer(AsyncWebsocketConsumer):
             # 세션이 존재하지 않는 경우. 로깅 또는 예외 처리 가능.
             # 지금은 조용히 넘어감.
             pass
+
+    @database_sync_to_async
+    def _get_session_is_active(self) -> bool:
+        """세션의 현재 활성화 상태를 DB에서 조회"""
+        try:
+            return Session.objects.get(pk=self.session_id).is_active
+        except Session.DoesNotExist:
+            return False
 
     # ------------------------------------------------------------------
     # 교수 접속 여부 관련 유틸
