@@ -48,7 +48,7 @@ def get_subject_info(subject_name: Optional[str] = None) -> str:
 
 
 # 질문 알잘딱 프롬프트 템플릿
-CLEAN_QUESTION_SYSTEM_PROMPT_TEMPLATE = """당신은 학생 질문을 정제하는 전문가입니다. 어떠한 감정도 배제한 채로로
+CLEAN_QUESTION_SYSTEM_PROMPT_TEMPLATE = """당신은 학생 질문을 정제하는 전문가입니다. 어떠한 감정도 배제한 채로
 학생이 작성한 질문에서 오타, 문법 오류, 불필요한 표현, 저속한 표현을 수정하고 명확하게 만들어야 합니다.
 원래 의도를 유지하면서 더 이해하기 쉽고 정제된 질문으로 변환하세요. 질문이 아닌 경우에는 최대한 
 저속한 표현이나 필요없는 표현은 필터링해서 원문과 비슷하게 내보내세요.대화한다는 느낌이 들지 않도록 하세요.
