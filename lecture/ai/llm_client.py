@@ -122,6 +122,26 @@ class LLMClient:
         Returns:
             LLM 응답 텍스트
         """
+        # -----------------------------
+        # 디버그용 프롬프트 출력 TODO: 나중에 제거
+        # -----------------------------
+        try:
+            print("\n[AI DEBUG] ===== LLM CALL START =====")
+            print(f"[AI DEBUG] model_name: {self.model_name}")
+            print(f"[AI DEBUG] temperature: {temperature}, max_tokens: {max_tokens}")
+            if system_prompt:
+                print("[AI DEBUG] --- system_prompt ---")
+                print(system_prompt)
+                print("[AI DEBUG] --- end system_prompt ---")
+            print("[AI DEBUG] --- user_prompt ---")
+            print(prompt)
+            print("[AI DEBUG] --- end user_prompt ---")
+            print(f"[AI DEBUG] image_path: {image_path}, has_image: {bool(image_path or image)}")
+            print("[AI DEBUG] =====  LLM CALL END (prompt dump) =====\n")
+        except Exception:
+            # 디버그 출력 자체가 실패하더라도 LLM 호출은 계속 진행
+            pass
+
         # 시스템 프롬프트가 있으면 모델에 전달
         if system_prompt:
             model = genai.GenerativeModel(
