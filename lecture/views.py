@@ -48,6 +48,7 @@ from .serializers import (
     SessionSerializer,
     SessionSummarySerializer,
     SimpleStatusResponseSerializer,
+    ImportantMomentSimpleSerializer,
 )
 
 
@@ -253,7 +254,6 @@ def end_session(request, session_id: UUID):
     responses={
         200: SimpleStatusResponseSerializer,
         400: OpenApiResponse(description="Invalid feedback_type"),
-        403: OpenApiResponse(description="Invalid device."),
         429: OpenApiResponse(description="Too many requests."),
     },
 )
@@ -263,7 +263,7 @@ def submit_feedback(request, session_id: UUID):
     학생: OK/HARD 피드백
 
     Path parameters:
-    - `id` (integer): 세션 ID
+    - `id` (UUID): 세션 ID
 
     Headers:
     - `X-Device-Hash` (string, optional): 익명 디바이스 ID (없으면 "anonymous")
@@ -329,7 +329,7 @@ def start_question_intent(request, session_id: UUID):
     - 응답으로 question_id를 돌려줌 → 학생/교수 둘 다 이 ID로 이후 API를 호출
 
     Path parameters:
-    - `id` (integer): 세션 ID
+    - `id` (UUID): 세션 ID
 
     Headers:
     - `X-Device-Hash` (string, optional)
@@ -642,6 +642,9 @@ def forward_question_to_professor(request, question_id: int):
 def like_question(request, question_id: int):
     """
     학생: '나도 궁금해요'
+
+    Path parameters:
+    - `id` (integer): Question ID
     """
     question = get_object_or_404(Question, id=question_id)
     device_hash = get_device_hash(request)
@@ -685,7 +688,7 @@ def list_session_questions(request, session_id: UUID):
     교수: 세션 질문 목록
 
     Path parameters:
-    - `id` (integer): 세션 ID
+    - `id` (UUID): 세션 ID
 
     Query parameters:
     - `forwarded_only` (string, optional): "true" 인 경우 교수에게 전달된 질문만
@@ -708,7 +711,7 @@ def list_session_questions(request, session_id: UUID):
 
 @extend_schema(
     request=MarkImportantUploadSerializer,
-    responses=QuestionCaptureResponseSerializer,
+    responses=ImportantMomentSimpleSerializer,
 )
 @api_view(["POST"])
 @parser_classes([MultiPartParser, FormParser])
@@ -721,7 +724,7 @@ def mark_important(request, session_id: UUID):
       - screenshot (optional)
 
     Path parameters:
-    - `id` (integer): 세션 ID
+    - `id` (UUID): 세션 ID
 
     Request body (multipart/form-data):
     - `note` (string, optional): 메모, 예: "중요 개념"
@@ -830,13 +833,9 @@ def hard_threshold_capture(request, session_id: UUID):
         "created_at": moment.created_at.isoformat(),
     }
 
-    # 학생 + 교수 둘 다에게 알림
+    # 학생에게만 알림
     async_to_sync(channel_layer.group_send)(
         get_session_group_name(session_id, "student"),
-        payload,
-    )
-    async_to_sync(channel_layer.group_send)(
-        get_session_group_name(session_id, "teacher"),
         payload,
     )
 
@@ -859,7 +858,7 @@ def session_summary(request, session_id: UUID):
     수업 Summary
 
     Path parameters:
-    - `id` (integer): 세션 ID
+    - `id` (UUID): 세션 ID
     """
     session = get_object_or_404(Session, id=session_id)
 

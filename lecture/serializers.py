@@ -142,7 +142,6 @@ class MarkImportantUploadSerializer(serializers.Serializer):
 class HardThresholdCaptureResponseSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     capture_url = serializers.CharField()
-    hard_ratio = serializers.CharField(allow_null=True)
 
 
 class HardThresholdCaptureUploadSerializer(serializers.Serializer):
@@ -160,12 +159,12 @@ class SessionSummaryMomentSerializer(serializers.Serializer):
     capture_url = serializers.CharField(allow_null=True)
     created_at = serializers.DateTimeField()
     question_id = serializers.IntegerField(allow_null=True)
+    is_hardest = serializers.BooleanField()
 
 
 class SessionSummarySerializer(serializers.Serializer):
     date = serializers.DateField()
     course = serializers.DictField()
-    duration_minutes = serializers.IntegerField()
     feedback = serializers.DictField()
     question_count = serializers.IntegerField()
     important_moments = SessionSummaryMomentSerializer(many=True)

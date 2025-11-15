@@ -183,7 +183,6 @@ class SessionConsumer(AsyncWebsocketConsumer):
             {
                 "event": "hard_alert",
                 "capture_url": event.get("capture_url"),
-                "hard_ratio": event.get("hard_ratio"),
                 "created_at": event.get("created_at"),
             }
         )
