@@ -185,7 +185,6 @@ MEDIA_URL = f"https://storage.googleapis.com/{GS_BUCKET_NAME}/"
 
 # 새로 업로드되는 객체를 공개 읽기 권한으로 만들고,
 # URL에 서명 쿼리스트링을 붙이지 않도록 설정
-GS_DEFAULT_ACL = "publicRead"
 GS_QUERYSTRING_AUTH = False
 
 # Django REST framework / OpenAPI 설정
