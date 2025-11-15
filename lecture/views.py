@@ -17,6 +17,7 @@ from drf_spectacular.utils import (
 )
 from .ai.clean import clean_question
 from .ai.answer import answer_question
+from .ai.summarize_image import summarize_image as summarize_important_image
 
 from .models import (
     Course,
@@ -129,6 +130,32 @@ def ai_answer_question(
         # TODO: print 대신 logger 사용
         print(f"Error in ai_answer_question: {e}")
         return "AI 조교가 현재 답변을 생성할 수 없습니다. 잠시 후 다시 시도해 주세요."
+
+
+def ai_summarize_important_image(
+    image_path: str | None = None,
+    subject_name: str | None = None,
+) -> str | None:
+    """
+    교수님이 마크한 중요 구간 캡처 이미지를 1줄로 요약.
+
+    summarize_image 모듈을 thin-wrapper로 감싸고, 오류 시 None을 반환합니다.
+    """
+    if not image_path:
+        return None
+
+    try:
+        summary = summarize_important_image(
+            image_path=image_path,
+            subject_name=subject_name,
+            temperature=0.3,
+        )
+        summary = summary.strip()
+        return summary or None
+    except Exception as e:
+        # TODO: print 대신 logger 사용
+        print(f"Error in ai_summarize_important_image: {e}")
+        return None
 
 
 # ------------------------
@@ -603,24 +630,42 @@ def mark_important(request, session_id: UUID):
     """
     session = get_object_or_404(Session, id=session_id, is_active=True)
 
-    note = request.data.get("note", "")
+    # 사용자가 직접 입력한 메모 (optional)
+    raw_note = request.data.get("note", "") or ""
     screenshot = request.FILES.get("screenshot")
 
+    # 1차로 ImportantMoment를 생성해서 파일을 디스크에 저장
     moment = ImportantMoment.objects.create(
         session=session,
         trigger="MANUAL",
-        note=note,
+        note=raw_note,
         screenshot_image=screenshot,
     )
 
     capture_url = moment.screenshot_image.url if screenshot else None
-    if screenshot:
-        print(
-            "[DEBUG] mark_important saved:",
-            moment.screenshot_image.name,
-            "->",
-            capture_url,
+
+    # -----------------------------
+    # 이미지 기반 1줄 요약 생성 (동기 처리)
+    # -----------------------------
+    auto_summary: str | None = None
+    if screenshot and getattr(moment, "screenshot_image", None):
+        image_path = getattr(moment.screenshot_image, "path", None)
+        auto_summary = ai_summarize_important_image(
+            image_path=image_path,
+            subject_name=session.course.code[:7],
         )
+
+    # note와 자동 요약 결합 로직
+    if raw_note and auto_summary:
+        final_note = f"{raw_note} | {auto_summary}"
+    elif auto_summary:
+        final_note = auto_summary
+    else:
+        final_note = raw_note
+
+    if final_note != moment.note:
+        moment.note = final_note
+        moment.save(update_fields=["note"])
 
     # 학생 그룹에만 브로드캐스트
     channel_layer = get_channel_layer()
@@ -628,14 +673,14 @@ def mark_important(request, session_id: UUID):
         get_session_group_name(session_id, "student"),
         {
             "type": "important_message",
-            "note": note,
+            "note": final_note,
             "capture_url": capture_url,
             "created_at": moment.created_at.isoformat(),
         },
     )
 
     return Response(
-        {"id": moment.id, "note": note, "capture_url": capture_url},
+        {"id": moment.id, "note": final_note, "capture_url": capture_url},
         status=status.HTTP_201_CREATED,
     )
 
