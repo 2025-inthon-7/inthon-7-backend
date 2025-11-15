@@ -43,14 +43,14 @@ else:
 class LLMClient:
     """Google Gemini API 클라이언트"""
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "gemini-2.5-flash"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "gemini-2.5-flash-lite"):
         """
         LLMClient 초기화
 
         Args:
             api_key: Google Gemini API 키 (없으면 환경변수에서 로드)
-            model: 사용할 모델명 (기본값: gemini-2.5-flash)
-                  옵션: gemini-2.5-flash, gemini-2.5-pro-preview-03-25, gemini-2.5-flash-preview-05-20
+            model: 사용할 모델명 (기본값: gemini-2.5-flash-lite - 더 빠른 응답)
+                  옵션: gemini-2.5-flash-lite, gemini-2.5-flash, gemini-2.5-pro-preview-03-25, gemini-2.5-flash-preview-05-20
         """
         self.api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         if not self.api_key:
@@ -79,13 +79,19 @@ class LLMClient:
                     if "generateContent" in m.supported_generation_methods
                 ]
                 if available_models:
-                    # gemini-2.5-flash 또는 가장 최신 모델 선택
+                    # gemini-2.5-flash-lite 우선, 없으면 gemini-2.5-flash, 없으면 가장 최신 모델 선택
                     fallback_model = None
                     for m in available_models:
                         model_name = m.replace("models/", "")
-                        if "gemini-2.5-flash" in model_name and "preview" not in model_name:
+                        if "gemini-2.5-flash-lite" in model_name and "preview" not in model_name:
                             fallback_model = model_name
                             break
+                    if not fallback_model:
+                        for m in available_models:
+                            model_name = m.replace("models/", "")
+                            if "gemini-2.5-flash" in model_name and "preview" not in model_name and "lite" not in model_name:
+                                fallback_model = model_name
+                                break
                     if not fallback_model:
                         fallback_model = available_models[0].replace("models/", "")
 
