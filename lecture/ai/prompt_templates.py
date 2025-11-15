@@ -1,51 +1,243 @@
 """
-Prompt templates for question cleaning and answering.
+Prompt Templates Module
 
-질문 정제 및 답변 생성을 위한 시스템/유저 프롬프트 템플릿 모음.
+LLM에 사용할 프롬프트 템플릿 정의
 """
 
-from typing import Optional, Tuple
+from typing import Optional
+from django.db.models import Q
+
+def get_subject_info(subject_name: Optional[str] = None) -> str:
+    """
+    과목명/코드에 해당하는 과목 정보를 DB에서 조회해 반환합니다.
+
+    Args:
+        subject_name: 과목 코드 또는 이름 (예: "COSE213", "자료구조" 등)
+                      None이거나 매칭되는 레코드가 없으면 빈 문자열 반환
+
+    Returns:
+        과목 정보(설명) 문자열 (없으면 빈 문자열)
+    """
+    if not subject_name or not subject_name.strip():
+        return ""
+
+    subject_name = subject_name.strip()
+
+    # 순환 의존을 피하기 위해 내부 import
+    from ..models import SubjectInfo
+
+    try:
+        subject = (
+            SubjectInfo.objects.filter(is_active=True)
+            .filter(Q(code__iexact=subject_name) | Q(name__iexact=subject_name))
+            .first()
+        )
+    except Exception:
+        return ""
+
+    if not subject:
+        return ""
+
+    # 설명만 반환하면, 프롬프트에서는 "과목: ..." 형식으로 이미 꾸며서 사용
+    return subject.description or ""
+
+
+# 질문 알잘딱 프롬프트 템플릿
+CLEAN_QUESTION_SYSTEM_PROMPT_TEMPLATE = """당신은 학생 질문을 정제하는 전문가입니다.
+학생이 작성한 질문에서 오타, 문법 오류, 불필요한 표현을 수정하고 명확하게 만들어야 합니다.
+원래 의도를 유지하면서 더 이해하기 쉽고 정제된 질문으로 변환하세요.
+
+{subject_section}제공된 교수님 화면 캡쳐 이미지가 있다면, 이미지의 내용을 참고하여 질문의 맥락을 더 정확히 파악하고 정제하세요.
+이미지에 표시된 강의 내용, 코드, 수식 등을 고려하여 질문을 더 명확하게 만들 수 있습니다.
+과목 관련 용어나 개념이 포함된 경우, 위 과목 정보를 참고하여 정확하게 정제하세요."""
+
+CLEAN_QUESTION_USER_TEMPLATE = """다음 학생 질문을 정제해주세요:
+
+{question}
+
+{image_instruction}
+
+정제된 질문만 반환해주세요. 추가 설명 없이 질문만 출력하세요."""
+
+CLEAN_QUESTION_WITH_IMAGE_TEMPLATE = """다음 학생 질문을 정제해주세요:
+
+{question}
+
+위 질문과 함께 제공된 교수님 화면 캡쳐 이미지를 참고하여 질문을 정제해주세요.
+이미지에 표시된 강의 내용, 코드, 수식 등을 고려하여 질문의 맥락을 파악하고 더 명확하게 만들어주세요.
+
+정제된 질문만 반환해주세요. 추가 설명 없이 질문만 출력하세요."""
+
+# 질문 detect 프롬프트트
+DETECT_QUESTION_SYSTEM_PROMPT = """당신은 학생 질문을 분류하는 전문가입니다.
+제공된 텍스트가 강의 관련 질문인지, 아니면 질문이 아닌지 판단하고, 질문인 경우 카테고리를 분류해야 합니다."""
+
+DETECT_QUESTION_USER_TEMPLATE = """다음 텍스트를 분석하여 질문인지 여부와 카테고리를 판단해주세요:
+
+{text}
+
+다음 JSON 형식으로 응답해주세요:
+{
+    "is_question": true/false,
+    "category": "학술적 질문"/"기술적 질문"/"일반 질문"/"질문 아님",
+    "confidence": 0.0-1.0 사이의 신뢰도 점수,
+    "reason": "판단 근거"
+}
+
+카테고리 설명:
+- "학술적 질문": 강의 내용, 개념, 이론에 대한 질문
+- "기술적 질문": 실습, 코드, 구현 방법에 대한 질문
+- "일반 질문": 강의와 관련은 있지만 구체적인 내용과 무관한 질문
+- "질문 아님": 질문이 아닌 경우 (응답은 항상 JSON 형식)"""
+
+#강의 요약 프롬프트트
+SUMMARIZE_LECTURE_SYSTEM_PROMPT = """당신은 강의 내용을 요약하는 전문가입니다.
+제공된 강의 텍스트나 대본을 바탕으로 핵심 내용을 명확하고 구조화된 형태로 요약해야 합니다."""
+
+SUMMARIZE_LECTURE_USER_TEMPLATE = """다음 강의 내용을 요약해주세요:
+
+{lecture_content}
+
+다음 항목들을 포함하여 요약해주세요:
+1. 주요 주제 및 목표
+2. 핵심 개념 및 내용
+3. 중요한 포인트
+4. 실습/예제 요약 (있는 경우)
+
+구조화된 형태로 명확하게 작성해주세요."""
+
+#교수 빙의 프롬프트 템플릿
+ANSWER_QUESTION_SYSTEM_PROMPT_TEMPLATE = """당신은 경험이 풍부하고 친절한 대학교수입니다.
+{subject_section}당신은 이 과목의 전문가이며, 학생들의 질문에 대해 명확하고 교육적으로 답변해야 합니다.
+
+답변 작성 시 다음 원칙을 따르세요:
+1. 명확하고 이해하기 쉬운 설명
+2. 필요시 예시나 비유 사용
+3. 단계별 설명 (복잡한 개념의 경우)
+4. 격려하고 긍정적인 톤 유지
+5. 강의 맥락을 고려한 답변 (특히 위 과목 내용과 관련된 경우 정확하게 답변)
+6. 추가 학습 자료나 참고 사항 제시 (필요시)
+7. 과목 관련 질문의 경우 해당 과목의 전문 지식을 활용하여 정확하게 답변
+
+**중요**: 답변은 최대한 딱딱하고 객관적으로 작성하세요. 불필요한 수식어나 감정 표현을 피하고, 핵심 내용만 간결하고 명확하게 전달하세요. 격려나 친근한 표현은 최소화하고 사실과 정보에 집중하세요."""
+
+ANSWER_QUESTION_USER_TEMPLATE = """학생이 다음과 같은 질문을 했습니다:
+
+{question}
+
+{context_section}
+{image_instruction}
+
+위 질문에 대해 교수님 역할로 명확하고 교육적인 답변을 작성해주세요.
+답변은 최대한 딱딱하고 객관적으로 작성하세요. 불필요한 수식어나 감정 표현 없이 핵심 내용만 간결하고 명확하게 전달하세요. 필요시 예시를 포함하되, 격려나 친근한 표현은 최소화하고 사실과 정보에 집중하세요."""
+
+ANSWER_QUESTION_WITH_CONTEXT_TEMPLATE = """학생이 다음과 같은 질문을 했습니다:
+
+{question}
+
+강의 맥락/컨텍스트:
+{lecture_context}
+{image_instruction}
+
+위 질문에 대해 교수님 역할로 명확하고 교육적인 답변을 작성해주세요.
+답변은 최대한 딱딱하고 객관적으로 작성하세요. 불필요한 수식어나 감정 표현 없이 핵심 내용만 간결하고 명확하게 전달하세요. 강의 맥락을 고려하여 답변하되, 필요시 예시를 포함하되 격려나 친근한 표현은 최소화하고 사실과 정보에 집중하세요."""
+
+ANSWER_QUESTION_WITH_IMAGE_TEMPLATE = """학생이 다음과 같은 질문을 했습니다:
+
+{question}
+
+{context_section}
+위 질문과 함께 제공된 교수님 화면 캡쳐 이미지를 참고하여 답변해주세요.
+이미지에 표시된 강의 내용, 코드, 수식, 화면 내용 등을 분석하여 질문의 맥락을 파악하고 정확하게 답변하세요.
+
+위 질문에 대해 교수님 역할로 명확하고 교육적인 답변을 작성해주세요.
+답변은 최대한 딱딱하고 객관적으로 작성하세요. 불필요한 수식어나 감정 표현 없이 핵심 내용만 간결하고 명확하게 전달하세요. 필요시 예시를 포함하되, 격려나 친근한 표현은 최소화하고 사실과 정보에 집중하세요."""
+
+ANSWER_QUESTION_WITH_CONTEXT_AND_IMAGE_TEMPLATE = """학생이 다음과 같은 질문을 했습니다:
+
+{question}
+
+강의 맥락/컨텍스트:
+{lecture_context}
+
+위 질문과 함께 제공된 교수님 화면 캡쳐 이미지를 참고하여 답변해주세요.
+이미지에 표시된 강의 내용, 코드, 수식, 화면 내용 등을 분석하여 질문의 맥락을 파악하고 정확하게 답변하세요.
+
+위 질문에 대해 교수님 역할로 명확하고 교육적인 답변을 작성해주세요.
+답변은 최대한 딱딱하고 객관적으로 작성하세요. 불필요한 수식어나 감정 표현 없이 핵심 내용만 간결하고 명확하게 전달하세요. 강의 맥락과 이미지 내용을 모두 고려하여 답변하되, 필요시 예시를 포함하되 격려나 친근한 표현은 최소화하고 사실과 정보에 집중하세요."""
 
 
 def get_clean_question_prompt(
     question: str,
     has_image: bool = False,
     subject_name: Optional[str] = None,
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """
-    질문 정제용 시스템/유저 프롬프트를 반환합니다.
+    질문 정제 프롬프트 생성
+
+    Args:
+        question: 정제할 학생 질문
+        has_image: 이미지가 제공되는지 여부
+        subject_name: 과목명 (예: "자료구조", "알고리즘" 등) (선택)
 
     Returns:
-        (system_prompt, user_prompt)
+        (system_prompt, user_prompt) 튜플
     """
-    subject_part = f"과목명은 '{subject_name}'입니다. " if subject_name else ""
-    image_part = (
-        "학생이 질문할 당시 교수님의 PPT 화면 캡쳐 이미지도 함께 제공합니다. "
-        "이미지에 있는 수식, 그래프, 표, 코드, 키워드도 참고해서 질문을 더 명확히 해주세요. "
-        if has_image
-        else ""
+    # 과목 정보 섹션 생성
+    subject_info = get_subject_info(subject_name)
+    if subject_info:
+        subject_section = f"강의 과목 정보:\n{subject_info}\n\n"
+    else:
+        subject_section = ""
+
+    system_prompt = CLEAN_QUESTION_SYSTEM_PROMPT_TEMPLATE.format(
+        subject_section=subject_section
     )
 
-    system_prompt = (
-        "당신은 한국어로 답변하는 대학 강의 조교 AI입니다. "
-        f"{subject_part}"
-        "당신의 역할은 학생이 입력한 질문을 더 명확하고 자연스러운 한국어 질문으로 정제하는 것입니다. "
-        "오타, 문법 오류, 어색한 표현을 수정하고, 질문의 핵심이 잘 드러나도록 다듬어야 합니다. "
-        f"{image_part}"
-        "단, 학생의 의도를 바꾸거나 새로운 정보를 추가하지 마세요. "
-        "질문이 두 개 이상 섞여 있다면 하나의 질문으로 자연스럽게 합치거나, "
-        "필요하다면 'A에 대해, 그리고 B에 대해'처럼 자연스럽게 이어주세요. "
-        "결과는 **질문 문장만** 출력하세요. 앞뒤에 설명이나 인사말, 따옴표, 마크다운 등을 붙이지 마세요."
+    if has_image:
+        user_prompt = CLEAN_QUESTION_WITH_IMAGE_TEMPLATE.format(question=question)
+    else:
+        user_prompt = CLEAN_QUESTION_USER_TEMPLATE.format(
+            question=question,
+            image_instruction="",
+        )
+
+    return (
+        system_prompt,
+        user_prompt,
     )
 
-    user_prompt = (
-        "다음은 학생이 입력한 원본 질문입니다.\n\n"
-        f"[원본 질문]\n{question}\n\n"
-        "위 질문을 읽고, 학생의 의도를 최대한 보존하면서 더 이해하기 쉽게 정제된 질문 한 문단으로 만들어 주세요.\n"
-        "출력은 정제된 질문 문장만 포함해야 합니다."
+
+def get_detect_question_prompt(text: str) -> tuple[str, str]:
+    """
+    질문 감지 프롬프트 생성
+
+    Args:
+        text: 분석할 텍스트
+
+    Returns:
+        (system_prompt, user_prompt) 튜플
+    """
+    return (
+        DETECT_QUESTION_SYSTEM_PROMPT,
+        DETECT_QUESTION_USER_TEMPLATE.format(text=text),
     )
 
-    return system_prompt, user_prompt
+
+def get_summarize_lecture_prompt(lecture_content: str) -> tuple[str, str]:
+    """
+    강의 요약 프롬프트 생성
+
+    Args:
+        lecture_content: 요약할 강의 내용
+
+    Returns:
+        (system_prompt, user_prompt) 튜플
+    """
+    return (
+        SUMMARIZE_LECTURE_SYSTEM_PROMPT,
+        SUMMARIZE_LECTURE_USER_TEMPLATE.format(lecture_content=lecture_content),
+    )
 
 
 def get_answer_question_prompt(
@@ -53,53 +245,61 @@ def get_answer_question_prompt(
     lecture_context: Optional[str] = None,
     has_image: bool = False,
     subject_name: Optional[str] = None,
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """
-    질문 답변용 시스템/유저 프롬프트를 반환합니다.
+    질문 답변 프롬프트 생성 (교수님 역할)
+
+    Args:
+        question: 학생의 질문
+        lecture_context: 강의 맥락/컨텍스트 (선택)
+        has_image: 이미지가 제공되는지 여부
+        subject_name: 과목명 (예: "자료구조", "알고리즘" 등) (선택)
 
     Returns:
-        (system_prompt, user_prompt)
+        (system_prompt, user_prompt) 튜플
     """
-    subject_part = f"이 강의의 과목명은 '{subject_name}'입니다. " if subject_name else ""
-    image_part = (
-        "질문 당시 교수님의 PPT 화면 캡쳐 이미지도 함께 제공됩니다. "
-        "이미지에 포함된 제목, 키워드, 수식, 코드, 표 등을 참고하여 답변의 맥락을 맞춰주세요. "
-        if has_image
-        else ""
-    )
-    lecture_part = (
-        "또한 강의 중에 다루었던 핵심 내용과 예시들이 함께 제공됩니다. "
-        "이 정보를 바탕으로, 학생이 강의 내용을 더 잘 이해할 수 있도록 설명해 주세요. "
-        if lecture_context
-        else ""
+    # 과목 정보 섹션 생성
+    subject_info = get_subject_info(subject_name)
+    if subject_info:
+        subject_section = (
+            f"당신이 가르치는 과목은 다음과 같습니다:\n\n과목: {subject_info}\n\n"
+        )
+    else:
+        subject_section = ""
+
+    system_prompt = ANSWER_QUESTION_SYSTEM_PROMPT_TEMPLATE.format(
+        subject_section=subject_section
     )
 
-    system_prompt = (
-        "당신은 한국어로 답변하는 대학 교수 역할의 AI입니다. "
-        f"{subject_part}"
-        "학생이 수업 중에 이해가 잘 되지 않는 부분을 질문했습니다. "
-        "당신의 목표는 학생이 개념을 깊이 이해할 수 있도록, 교육적이고 친절하게 설명하는 것입니다. "
-        f"{image_part}"
-        f"{lecture_part}"
-        "답변은 다음 원칙을 따르세요:\n"
-        "1. 가능한 한 쉬운 언어로, 단계적으로 설명합니다.\n"
-        "2. 필요한 경우 간단한 예시나 비유를 사용합니다.\n"
-        "3. 공식적인 수학/컴퓨터 과학 용어가 필요하면 함께 알려주되, 풀이도 덧붙입니다.\n"
-        "4. 너무 장황하지 않게, 하지만 학생이 이해할 수 있을 정도로 충분한 길이로 답변합니다.\n"
-        "5. 'AI로서'라는 표현은 사용하지 말고, 실제 교수처럼 자연스럽게 설명합니다."
+    if has_image:
+        if lecture_context:
+            user_prompt = ANSWER_QUESTION_WITH_CONTEXT_AND_IMAGE_TEMPLATE.format(
+                question=question,
+                lecture_context=lecture_context,
+            )
+        else:
+            user_prompt = ANSWER_QUESTION_WITH_IMAGE_TEMPLATE.format(
+                question=question,
+                context_section="",
+            )
+    else:
+        if lecture_context:
+            user_prompt = ANSWER_QUESTION_WITH_CONTEXT_TEMPLATE.format(
+                question=question,
+                lecture_context=lecture_context,
+                image_instruction="",
+            )
+        else:
+            user_prompt = ANSWER_QUESTION_USER_TEMPLATE.format(
+                question=question,
+                context_section="",
+                image_instruction="",
+            )
+
+    return (
+        system_prompt,
+        user_prompt,
     )
 
-    context_block = (
-        f"[강의 맥락]\n{lecture_context}\n\n" if lecture_context else ""
-    )
-
-    user_prompt = (
-        f"{context_block}"
-        "다음은 학생의 질문입니다.\n\n"
-        f"[학생 질문]\n{question}\n\n"
-        "위 질문에 대해, 위에서 제시한 원칙을 지키면서 한국어로 답변해 주세요."
-    )
-
-    return system_prompt, user_prompt
 
 

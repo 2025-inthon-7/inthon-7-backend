@@ -1,11 +1,32 @@
 from django.db import models
 import uuid
 
+
 class Course(models.Model):
     code = models.CharField(max_length=50, unique=True)
     name = models.CharField(max_length=100)
     professor = models.CharField(max_length=100)
     time = models.CharField(max_length=100)
+
+
+class SubjectInfo(models.Model):
+    """
+    과목 코드/이름별 상세 설명을 담는 모델.
+
+    프롬프트 템플릿에서 과목 정보를 주입할 때 사용됩니다.
+    """
+
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=100)
+    description = models.TextField()
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "Subject info"
+        verbose_name_plural = "Subject infos"
+
+    def __str__(self) -> str:  # pragma: no cover - admin 표시용
+        return f"{self.code} - {self.name}"
 
 class Session(models.Model):
     # UUID를 기본 키로 사용
