@@ -3,9 +3,12 @@ from __future__ import annotations
 import json
 from typing import Any, Dict
 
+from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.conf import settings
 from django.utils import timezone
+
+from lecture.models import Session
 
 try:
     import redis.asyncio as redis  # type: ignore
@@ -44,6 +47,8 @@ class SessionConsumer(AsyncWebsocketConsumer):
         # 교수 접속 여부를 Redis에 기록 (멀티 프로세스/서버에서도 일관되게 확인 가능)
         if self.role == "teacher":
             await self._mark_teacher_connected()
+            # 교수가 접속하면, 비활성 세션이라도 다시 활성화
+            await self._activate_session_if_needed()
             # 옵션: 학생 그룹에 "교수 온라인" 상태 브로드캐스트 가능
             await self._broadcast_teacher_presence()
 
@@ -201,6 +206,25 @@ class SessionConsumer(AsyncWebsocketConsumer):
 
     async def send_json(self, data: Dict[str, Any]) -> None:
         await self.send(text_data=json.dumps(data))
+
+    # ------------------------------------------------------------------
+    # 세션 활성화
+    # ------------------------------------------------------------------
+    @database_sync_to_async
+    def _activate_session_if_needed(self) -> None:
+        """
+        교수가 접속했을 때, 해당 세션이 비활성(is_active=False) 상태이면
+        다시 활성(is_active=True) 상태로 변경.
+        """
+        try:
+            session = Session.objects.get(id=self.session_id)
+            if not session.is_active:
+                session.is_active = True
+                session.save(update_fields=["is_active"])
+        except Session.DoesNotExist:
+            # 세션이 존재하지 않는 경우. 로깅 또는 예외 처리 가능.
+            # 지금은 조용히 넘어감.
+            pass
 
     # ------------------------------------------------------------------
     # 교수 접속 여부 관련 유틸

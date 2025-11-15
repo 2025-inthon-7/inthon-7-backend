@@ -303,7 +303,7 @@ def submit_feedback(request, session_id: UUID):
         {
             "type": "feedback_message",
             "feedback_type": feedback_type,
-            "created_at": event.created_at.isoformat(),
+            "created_at": timezone.localtime(event.created_at).isoformat(),
         },
     )
 
@@ -354,12 +354,12 @@ def start_question_intent(request, session_id: UUID):
         {
             "type": "question_intent",
             "question_id": question.id,
-            "created_at": question.created_at.isoformat(),
+            "created_at": timezone.localtime(question.created_at).isoformat(),
         },
     )
 
     return Response(
-        {"question_id": question.id, "created_at": question.created_at.isoformat()},
+        {"question_id": question.id, "created_at": timezone.localtime(question.created_at).isoformat()},
         status=status.HTTP_201_CREATED,
     )
 
@@ -416,7 +416,7 @@ def upload_question_capture(request, question_id: int):
             "type": "question_capture",
             "question_id": question.id,
             "capture_url": capture_url,
-            "created_at": moment.created_at.isoformat(),
+            "created_at": timezone.localtime(moment.created_at).isoformat(),
         },
     )
 
@@ -626,7 +626,7 @@ def forward_question_to_professor(request, question_id: int):
         "question_id": question.id,
         "cleaned_text": cleaned_for_answer,
         "capture_url": screenshot_url,
-        "created_at": question.updated_at.isoformat(),
+        "created_at": timezone.localtime(question.updated_at).isoformat(),
     }
     async_to_sync(channel_layer.group_send)(
         get_session_group_name(question.session_id, "teacher"),
@@ -792,7 +792,7 @@ def mark_important(request, session_id: UUID):
             "type": "important_message",
             "note": raw_note,
             "capture_url": capture_url,
-            "created_at": moment.created_at.isoformat(),
+            "created_at": timezone.localtime(moment.created_at).isoformat(),
         },
     )
 
@@ -857,7 +857,7 @@ def hard_threshold_capture(request, session_id: UUID):
     payload = {
         "type": "hard_alert",
         "capture_url": capture_url,
-        "created_at": moment.created_at.isoformat(),
+        "created_at": timezone.localtime(moment.created_at).isoformat(),
     }
 
     # 학생에게만 알림
@@ -984,7 +984,7 @@ def session_summary(request, session_id: UUID):
             "trigger": m.trigger,
             "note": m.note,
             "capture_url": m.screenshot_image.url if m.screenshot_image else None,
-            "created_at": m.created_at.isoformat(),
+            "created_at": timezone.localtime(m.created_at).isoformat(),
             "question_id": m.question_id,
             "is_hardest": m.is_hardest,
         }
