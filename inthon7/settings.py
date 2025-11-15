@@ -212,3 +212,43 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "API documentation for InThon lecture service",
     "VERSION": "1.0.0",
 }
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+        },
+    },
+    # root 로거: 모든 로그를 콘솔로
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
+    },
+    # Django 요청/응답 관련 에러 (traceback 포함)
+    "loggers": {
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": True,
+        },
+        # 필요하면 django 전체 로그도 보고 싶을 때
+        "django": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": True,
+        },
+        # uvicorn 에러도 같이 보고 싶으면
+        "uvicorn.error": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": True,
+        },
+        "uvicorn.access": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}
