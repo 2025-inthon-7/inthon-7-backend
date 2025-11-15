@@ -58,11 +58,11 @@ urlpatterns = [
         views.list_session_questions,
         name="list_session_questions",
     ),
-    path(
-        "questions/<int:question_id>/",
-        views.get_question,
-        name="get_question",
-    ),
+    # path(
+    #     "questions/<int:question_id>/",
+    #     views.get_question,
+    #     name="get_question",
+    # ),
 
     # '중요해요' + HARD capture
     path(
