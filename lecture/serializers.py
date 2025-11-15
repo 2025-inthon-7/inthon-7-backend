@@ -1,7 +1,15 @@
 # lecture/serializers.py
 from rest_framework import serializers
 from drf_spectacular.utils import OpenApiTypes, extend_schema_field
+from django.utils import timezone
 from .models import Course, Session, Question, ImportantMoment
+
+
+class KSTDateTimeField(serializers.DateTimeField):
+    def to_representation(self, value):
+        if value:
+            value = timezone.localtime(value)
+        return super().to_representation(value)
 
 
 class CourseSerializer(serializers.ModelSerializer):
@@ -20,6 +28,8 @@ class SessionSerializer(serializers.ModelSerializer):
 
 class QuestionSerializer(serializers.ModelSerializer):
     like_count = serializers.SerializerMethodField()
+    created_at = KSTDateTimeField(read_only=True)
+    updated_at = KSTDateTimeField(read_only=True)
 
     class Meta:
         model = Question
@@ -43,8 +53,6 @@ class QuestionSerializer(serializers.ModelSerializer):
             "forwarded_to_professor",
             "status",
             "like_count",
-            "created_at",
-            "updated_at",
         ]
 
     def get_like_count(self, obj: Question) -> int:
@@ -53,6 +61,8 @@ class QuestionSerializer(serializers.ModelSerializer):
 
 
 class ImportantMomentSerializer(serializers.ModelSerializer):
+    created_at = KSTDateTimeField(read_only=True)
+
     class Meta:
         model = ImportantMoment
         fields = [
@@ -64,7 +74,7 @@ class ImportantMomentSerializer(serializers.ModelSerializer):
             "screenshot_image",
             "created_at",
         ]
-        read_only_fields = ["created_at"]
+        read_only_fields = []
 
 
 class FeedbackSubmitSerializer(serializers.Serializer):
@@ -77,7 +87,7 @@ class SimpleStatusResponseSerializer(serializers.Serializer):
 
 class QuestionIntentResponseSerializer(serializers.Serializer):
     question_id = serializers.IntegerField()
-    created_at = serializers.DateTimeField()
+    created_at = KSTDateTimeField()
 
 
 class QuestionCaptureResponseSerializer(serializers.Serializer):
@@ -99,7 +109,7 @@ class QuestionCaptureUploadSerializer(serializers.Serializer):
     질문 캡처 업로드용 multipart/form-data 스키마
     """
 
-    screenshot = UploadImageField()
+    screenshot = UploadImageField(required=False)
 
 
 class QuestionTextSubmitSerializer(serializers.Serializer):
@@ -151,7 +161,7 @@ class HardThresholdCaptureUploadSerializer(serializers.Serializer):
     HARD threshold 캡처용 multipart/form-data 스키마
     """
 
-    screenshot = UploadImageField()
+    screenshot = UploadImageField(required=False)
 
 
 class SessionSummaryMomentSerializer(serializers.Serializer):
@@ -159,7 +169,7 @@ class SessionSummaryMomentSerializer(serializers.Serializer):
     trigger = serializers.CharField()
     note = serializers.CharField(allow_blank=True)
     capture_url = serializers.CharField(allow_null=True)
-    created_at = serializers.DateTimeField()
+    created_at = KSTDateTimeField()
     question_id = serializers.IntegerField(allow_null=True)
     is_hardest = serializers.BooleanField()
 
