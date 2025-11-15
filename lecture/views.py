@@ -7,6 +7,7 @@ from uuid import UUID
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from django.db.models import Count
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from drf_spectacular.utils import (
@@ -209,6 +210,38 @@ def get_today_session(request, course_code: str):
     session = get_or_create_today_session_by_course_code(course_code)
     data = SessionSerializer(session).data
     return Response(data)
+
+
+@extend_schema(
+    request=None,
+    responses=SimpleStatusResponseSerializer,
+)
+@api_view(["POST"])
+def end_session(request, session_id: UUID):
+    """
+    교수: 강의(세션) 종료
+
+    Path parameters:
+    - `id` (UUID): 세션 ID
+    """
+    session = get_object_or_404(Session, id=session_id)
+    session.is_active = False
+    session.save(update_fields=["is_active"])
+
+    # 웹소켓으로 세션 종료 알림
+    channel_layer = get_channel_layer()
+    payload = {"type": "session_ended"}
+
+    async_to_sync(channel_layer.group_send)(
+        get_session_group_name(session_id, "teacher"),
+        payload,
+    )
+    async_to_sync(channel_layer.group_send)(
+        get_session_group_name(session_id, "student"),
+        payload,
+    )
+
+    return Response({"status": "ok"})
 
 
 # ------------------------
@@ -830,6 +863,33 @@ def session_summary(request, session_id: UUID):
     """
     session = get_object_or_404(Session, id=session_id)
 
+    if not session.is_active and not session.hardest_moments_calculated:
+        hard_moments = ImportantMoment.objects.filter(session=session, trigger="HARD")
+
+        moment_hard_counts = []
+        for moment in hard_moments:
+            start_time = moment.created_at - timedelta(minutes=1)
+            end_time = moment.created_at + timedelta(minutes=1)
+            hard_feedback_count = FeedbackEvent.objects.filter(
+                session=session,
+                feedback_type="HARD",
+                created_at__range=(start_time, end_time),
+            ).count()
+            moment_hard_counts.append((moment, hard_feedback_count))
+
+        moment_hard_counts.sort(key=lambda x: (x[1], x[0].created_at), reverse=True)
+
+        top_5_moments = [item[0] for item in moment_hard_counts[:5]]
+        top_5_moment_ids = [m.id for m in top_5_moments]
+
+        if top_5_moment_ids:
+            ImportantMoment.objects.filter(id__in=top_5_moment_ids).update(
+                is_hardest=True
+            )
+
+        session.hardest_moments_calculated = True
+        session.save(update_fields=["hardest_moments_calculated"])
+
 
     first_feedback = (
         FeedbackEvent.objects.filter(session=session)
@@ -866,7 +926,32 @@ def session_summary(request, session_id: UUID):
 
 
     # important moments
-    moments_qs = ImportantMoment.objects.filter(session=session).order_by("created_at")
+    # 1. 교수님이 mark_import 한 ImportantMoment 전체
+    manual_moments = ImportantMoment.objects.filter(session=session, trigger="MANUAL")
+
+    # 2. Question 나도 궁금해요 상위 5개 (동율이면 앞쪽걸로...) ImportantMoment
+    top_questions = (
+        Question.objects.filter(session=session)
+        .annotate(like_count=Count("likes"))
+        .order_by("-like_count", "created_at")[:5]
+    )
+    top_question_ids = [q.id for q in top_questions]
+    question_moments = ImportantMoment.objects.filter(
+        session=session, trigger="QUESTION", question_id__in=top_question_ids
+    )
+
+    # 3. 5개의 Hardest ImportantMoment
+    hardest_moments = ImportantMoment.objects.filter(session=session, is_hardest=True)
+
+    # 3가지 종류 조합 후 시간 순 정렬
+    moment_ids = set()
+    moment_ids.update(manual_moments.values_list("id", flat=True))
+    moment_ids.update(question_moments.values_list("id", flat=True))
+    moment_ids.update(hardest_moments.values_list("id", flat=True))
+
+    moments_qs = ImportantMoment.objects.filter(id__in=list(moment_ids)).order_by(
+        "created_at"
+    )
     moments_data = [
         {
             "id": m.id,
@@ -875,6 +960,7 @@ def session_summary(request, session_id: UUID):
             "capture_url": m.screenshot_image.url if m.screenshot_image else None,
             "created_at": m.created_at.isoformat(),
             "question_id": m.question_id,
+            "is_hardest": m.is_hardest,
         }
         for m in moments_qs
     ]

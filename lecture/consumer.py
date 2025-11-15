@@ -188,6 +188,14 @@ class SessionConsumer(AsyncWebsocketConsumer):
             }
         )
 
+    async def session_ended(self, event: Dict[str, Any]) -> None:
+        """
+        교수가 세션을 종료했을 때.
+        모든 클라이언트(교수/학생)에게 브로드캐스트.
+        """
+        await self.send_json({"event": "session_ended"})
+        await self.close()
+
     # ------------------------------------------------------------------
     # 유틸
     # ------------------------------------------------------------------

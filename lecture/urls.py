@@ -9,6 +9,11 @@ urlpatterns = [
         views.get_today_session,
         name="get_today_session",
     ),
+    path(
+        "sessions/<uuid:session_id>/end/",
+        views.end_session,
+        name="end_session",
+    ),
 
     # Feedback (Session UUID)
     path(

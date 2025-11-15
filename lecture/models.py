@@ -63,6 +63,7 @@ class Session(models.Model):
     course = models.ForeignKey(Course, on_delete=models.CASCADE)
     date = models.DateField()
     is_active = models.BooleanField(default=True)
+    hardest_moments_calculated = models.BooleanField(default=False)
 
     class Meta:
         constraints = [
@@ -130,3 +131,4 @@ class ImportantMoment(models.Model):
         upload_to=important_moment_screenshot_upload_path, null=True, blank=True
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    is_hardest = models.BooleanField(default=False)
