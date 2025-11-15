@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import timedelta
 from uuid import UUID
 from asgiref.sync import async_to_sync
@@ -44,6 +45,9 @@ from .serializers import (
     MarkImportantUploadSerializer,
     SessionSummarySerializer,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 # ------------------------
@@ -102,8 +106,7 @@ def ai_clean_question(
         )
         return cleaned
     except Exception as e:
-        # TODO: print 대신 logger 사용
-        print(f"Error in ai_clean_question: {e}")
+        logger.error("Error in ai_clean_question: %s", e)
         return original_text.strip()
 
 
@@ -127,8 +130,7 @@ def ai_answer_question(
         )
         return answer
     except Exception as e:
-        # TODO: print 대신 logger 사용
-        print(f"Error in ai_answer_question: {e}")
+        logger.error("Error in ai_answer_question: %s", e)
         return "AI 조교가 현재 답변을 생성할 수 없습니다. 잠시 후 다시 시도해 주세요."
 
 
@@ -141,27 +143,35 @@ def ai_summarize_important_image(
 
     summarize_image 모듈을 thin-wrapper로 감싸고, 오류 시 None을 반환합니다.
     """
-    print("[AI DEBUG] ai_summarize_important_image called",
-          "image_path =", image_path,
-          "subject_name =", subject_name)
+    logger.info(
+        "[AI DEBUG] ai_summarize_important_image called image_path=%s subject_name=%s",
+        image_path,
+        subject_name,
+    )
 
     if not image_path:
-        print("[AI DEBUG] ai_summarize_important_image: no image_path, skipping LLM")
+        logger.info(
+            "[AI DEBUG] ai_summarize_important_image: no image_path, skipping LLM"
+        )
         return None
 
     try:
-        print("[AI DEBUG] ai_summarize_important_image: calling summarize_important_image")
+        logger.info(
+            "[AI DEBUG] ai_summarize_important_image: calling summarize_important_image"
+        )
         summary = summarize_important_image(
             image_path=image_path,
             subject_name=subject_name,
             temperature=0.3,
         )
         summary = summary.strip()
-        print("[AI DEBUG] ai_summarize_important_image: summary =", summary[:200])
+        logger.info(
+            "[AI DEBUG] ai_summarize_important_image: summary_preview=%s",
+            summary[:200],
+        )
         return summary or None
     except Exception as e:
-        # TODO: print 대신 logger 사용
-        print("[AI DEBUG] ai_summarize_important_image ERROR:", e)
+        logger.error("[AI DEBUG] ai_summarize_important_image ERROR: %s", e)
         return None
 
 
@@ -355,10 +365,9 @@ def upload_question_capture(request, question_id: int):
     )
 
     capture_url = moment.screenshot_image.url
-    print(
-        "[DEBUG] upload_question_capture saved:",
+    logger.info(
+        "[DEBUG] upload_question_capture saved: %s -> %s",
         moment.screenshot_image.name,
-        "->",
         capture_url,
     )
 
@@ -640,11 +649,11 @@ def mark_important(request, session_id: UUID):
     # 사용자가 직접 입력한 메모 (optional)
     raw_note = request.data.get("note", "") or ""
     screenshot = request.FILES.get("screenshot")
-    print(
-        "[AI DEBUG] mark_important called",
-        "session_id =", session_id,
-        "has_screenshot =", bool(screenshot),
-        "raw_note =", raw_note,
+    logger.info(
+        "[AI DEBUG] mark_important called session_id=%s has_screenshot=%s raw_note=%r",
+        session_id,
+        bool(screenshot),
+        raw_note,
     )
 
     # 1차로 ImportantMoment를 생성해서 파일을 디스크에 저장
@@ -656,10 +665,10 @@ def mark_important(request, session_id: UUID):
     )
 
     capture_url = moment.screenshot_image.url if screenshot else None
-    print(
-        "[AI DEBUG] mark_important saved ImportantMoment",
-        "id =", moment.id,
-        "capture_url =", capture_url,
+    logger.info(
+        "[AI DEBUG] mark_important saved ImportantMoment id=%s capture_url=%s",
+        moment.id,
+        capture_url,
     )
 
     # -----------------------------
@@ -668,19 +677,20 @@ def mark_important(request, session_id: UUID):
     auto_summary: str | None = None
     if screenshot and getattr(moment, "screenshot_image", None):
         image_url = getattr(moment.screenshot_image, "url", None)
-        print(
-            "[AI DEBUG] mark_important before ai_summarize_important_image",
-            "image_url =", image_url,
+        logger.info(
+            "[AI DEBUG] mark_important before ai_summarize_important_image image_url=%s",
+            image_url,
         )
         auto_summary = ai_summarize_important_image(
             image_path=image_url,
             subject_name=session.course.code[:7],
         )
     else:
-        print(
-            "[AI DEBUG] mark_important: skipping ai_summarize_important_image",
-            "screenshot_exists =", bool(screenshot),
-            "moment_has_image =", bool(getattr(moment, "screenshot_image", None)),
+        logger.info(
+            "[AI DEBUG] mark_important: skipping ai_summarize_important_image "
+            "screenshot_exists=%s moment_has_image=%s",
+            bool(screenshot),
+            bool(getattr(moment, "screenshot_image", None)),
         )
 
     # note와 자동 요약 결합 로직
@@ -691,10 +701,10 @@ def mark_important(request, session_id: UUID):
     else:
         final_note = raw_note
 
-    print(
-        "[AI DEBUG] mark_important final_note decided",
-        "auto_summary_present =", bool(auto_summary),
-        "final_note =", final_note,
+    logger.info(
+        "[AI DEBUG] mark_important final_note decided auto_summary_present=%s final_note=%r",
+        bool(auto_summary),
+        final_note,
     )
 
     if final_note != moment.note:
@@ -758,10 +768,9 @@ def hard_threshold_capture(request, session_id: UUID):
     )
 
     capture_url = moment.screenshot_image.url
-    print(
-        "[DEBUG] hard_threshold_capture saved:",
+    logger.info(
+        "[DEBUG] hard_threshold_capture saved: %s -> %s",
         moment.screenshot_image.name,
-        "->",
         capture_url,
     )
     channel_layer = get_channel_layer()

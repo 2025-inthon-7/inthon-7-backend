@@ -7,9 +7,13 @@ Image Summarization Module
 
 from typing import Optional, Union, Any
 from pathlib import Path
+import logging
 
 from .llm_client import LLMClient, get_default_client
 from .prompt_templates import get_summarize_image_prompt
+
+
+logger = logging.getLogger(__name__)
 
 
 def summarize_image(
@@ -36,20 +40,24 @@ def summarize_image(
         ValueError: image_path와 image가 모두 없는 경우
         RuntimeError: LLM API 호출 실패 시
     """
-    print(
-        "[AI DEBUG] summarize_image called",
-        "raw_image_path =", image_path,
-        "has_image_obj =", bool(image),
-        "subject_name =", subject_name,
-        "temperature =", temperature,
+    logger.info(
+        "[AI DEBUG] summarize_image called raw_image_path=%s has_image_obj=%s subject_name=%s temperature=%s",
+        image_path,
+        bool(image),
+        subject_name,
+        temperature,
     )
     if not image_path and not image:
-        print("[AI DEBUG] summarize_image: no image input, raising ValueError")
+        logger.info(
+            "[AI DEBUG] summarize_image: no image input, raising ValueError"
+        )
         raise ValueError("image_path 또는 image 중 하나는 필수입니다.")
 
     if llm_client is None:
         # summarize 함수는 flash 모델 사용 (정확도가 중요하므로)
-        print("[AI DEBUG] summarize_image: creating default LLMClient (gemini-2.5-flash)")
+        logger.info(
+            "[AI DEBUG] summarize_image: creating default LLMClient (gemini-2.5-flash)"
+        )
         llm_client = LLMClient(model="gemini-2.5-flash")
 
     # 이미지 경로를 문자열로 변환
@@ -80,9 +88,9 @@ def summarize_image(
     max_output_tokens = 500
 
     try:
-        print(
-            "[AI DEBUG] summarize_image: calling llm_client.call",
-            "img_path_str =", img_path_str,
+        logger.info(
+            "[AI DEBUG] summarize_image: calling llm_client.call img_path_str=%s",
+            img_path_str,
         )
         summary = llm_client.call(
             prompt=user_prompt,
@@ -93,13 +101,13 @@ def summarize_image(
             image=image,
         )
         summary = summary.strip()
-        print(
-            "[AI DEBUG] summarize_image: LLM call finished, summary_preview =",
+        logger.info(
+            "[AI DEBUG] summarize_image: LLM call finished summary_preview=%s",
             summary[:200],
         )
         return summary
     except Exception as e:  # pragma: no cover - 외부 API 예외
-        print("[AI DEBUG] summarize_image ERROR:", e)
+        logger.error("[AI DEBUG] summarize_image ERROR: %s", e)
         raise RuntimeError(f"이미지 요약 중 오류 발생: {str(e)}")
 
 
