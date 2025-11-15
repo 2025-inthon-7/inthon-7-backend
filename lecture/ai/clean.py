@@ -71,7 +71,7 @@ def clean_question(
     )
 
     # 이미지가 포함된 경우 더 많은 토큰 필요
-    max_output_tokens = 2000 if has_image_input else 500
+    max_output_tokens = 4096 if has_image_input else 2048
 
     try:
         cleaned = llm_client.call(
