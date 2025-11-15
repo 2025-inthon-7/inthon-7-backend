@@ -13,9 +13,15 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 import os
 from google.oauth2 import service_account
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# .env 로드 (프로젝트 루트 기준)
+# - 로컬 개발에서는 GCS_CREDENTIALS_FILE 등 환경변수를 .env에서 읽어오고
+# - 배포 환경에서는 OS 환경변수를 그대로 사용
+load_dotenv(BASE_DIR / ".env")
 
 
 # Quick-start development settings - unsuitable for production
