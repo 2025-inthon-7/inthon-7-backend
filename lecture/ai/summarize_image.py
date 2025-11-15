@@ -84,8 +84,8 @@ def summarize_image(
         subject_name=subject_name,
     )
 
-    # 이미지 요약은 간결하게 1줄이므로 적당한 토큰 수 설정
-    max_output_tokens = 500
+    # 이미지 요약을 위한 충분한 토큰 수 설정
+    #max_output_tokens = 36000
 
     try:
         logger.info(
@@ -96,7 +96,7 @@ def summarize_image(
             prompt=user_prompt,
             system_prompt=system_prompt,
             temperature=temperature,
-            max_tokens=max_output_tokens,
+            #max_tokens=max_output_tokens,
             image_path=img_path_str,
             image=image,
         )
