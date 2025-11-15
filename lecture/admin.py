@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Course, Session, FeedbackEvent, Question, ImportantMoment
+from .models import Course, Session, FeedbackEvent, Question, ImportantMoment, SubjectInfo
 
 
 @admin.register(Course)
@@ -64,3 +64,10 @@ class ImportantMomentAdmin(admin.ModelAdmin):
         "session__course__name",
     )
     readonly_fields = ("created_at",)
+
+
+@admin.register(SubjectInfo)
+class SubjectInfoAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "is_active")
+    list_filter = ("is_active",)
+    search_fields = ("code", "name", "description")

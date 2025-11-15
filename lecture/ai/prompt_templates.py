@@ -23,7 +23,6 @@ def get_subject_info(subject_name: Optional[str] = None) -> str:
 
     subject_name = subject_name.strip()
 
-    # 순환 의존을 피하기 위해 내부 import
     from ..models import SubjectInfo
 
     try:
@@ -38,7 +37,6 @@ def get_subject_info(subject_name: Optional[str] = None) -> str:
     if not subject:
         return ""
 
-    # 설명만 반환하면, 프롬프트에서는 "과목: ..." 형식으로 이미 꾸며서 사용
     return subject.description or ""
 
 
