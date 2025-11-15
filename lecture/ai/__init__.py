@@ -9,12 +9,13 @@ This package contains:
 """
 
 from .clean import clean_question
-from .answer import answer_question
+from .answer import answer_question, answer_question_stream
 from .llm_client import LLMClient
 
 __all__ = [
     'clean_question',
     'answer_question',
+    'answer_question_stream',
     'LLMClient',
 ]
 

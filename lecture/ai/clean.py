@@ -43,7 +43,8 @@ def clean_question(
         raise ValueError("질문이 비어있습니다.")
 
     if llm_client is None:
-        llm_client = get_default_client()
+        # clean은 빠른 응답을 위해 flash-lite 사용
+        llm_client = LLMClient(model="gemini-2.5-flash-lite")
 
     # 이미지 경로를 문자열로 변환
     img_path_str: Optional[str] = None

@@ -47,7 +47,8 @@ def answer_question(
         raise ValueError("질문이 비어있습니다.")
 
     if llm_client is None:
-        llm_client = get_default_client()
+        # answer는 더 정확한 답변을 위해 flash 사용
+        llm_client = LLMClient(model="gemini-2.5-flash")
 
     # 이미지 경로를 문자열로 변환
     img_path_str: Optional[str] = None
@@ -90,6 +91,88 @@ def answer_question(
         return answer.strip()
     except Exception as e:  # pragma: no cover - 외부 API 예외
         raise RuntimeError(f"질문 답변 생성 중 오류 발생: {str(e)}")
+
+
+def answer_question_stream(
+    question: str,
+    lecture_context: Optional[str] = None,
+    image_path: Optional[Union[str, Path]] = None,
+    image: Optional[Any] = None,
+    llm_client: Optional[LLMClient] = None,
+    temperature: float = 0.7,
+    max_tokens: Optional[int] = 65000,
+    subject_name: Optional[str] = None,
+):
+    """
+    학생 질문에 대해 교수님 역할로 답변을 스트리밍으로 생성합니다.
+    교수님 화면 캡쳐 이미지를 고려하여 답변할 수 있습니다.
+
+    Args:
+        question: 학생의 질문
+        lecture_context: 강의 맥락/컨텍스트 (선택) - 강의 내용, 이전 대화 등
+        image_path: 교수님 화면 캡쳐 이미지 파일 경로 또는 URL (선택)
+        image: PIL Image 객체 또는 이미지 데이터 (선택, image_path와 함께 사용 불가)
+        llm_client: LLM 클라이언트 인스턴스 (없으면 기본 인스턴스 사용)
+        temperature: 모델 온도 (기본값: 0.7)
+        max_tokens: 최대 토큰 수 (기본값: 65000)
+        subject_name: 과목명 (예: "자료구조", "알고리즘" 등) (선택)
+
+    Yields:
+        str: 답변 텍스트 청크 (스트리밍)
+
+    Raises:
+        ValueError: question이 비어있는 경우
+        RuntimeError: LLM API 호출 실패 시
+    """
+    if not question or not question.strip():
+        raise ValueError("질문이 비어있습니다.")
+
+    if llm_client is None:
+        # answer는 더 정확한 답변을 위해 flash 사용
+        llm_client = LLMClient(model="gemini-2.5-flash")
+
+    # 이미지 경로를 문자열로 변환
+    img_path_str: Optional[str] = None
+    has_image_input = bool(image_path or image)
+
+    # image_path가 빈 문자열이거나 None인 경우 처리
+    if image_path:
+        if isinstance(image_path, str):
+            img_path_str = image_path.strip()
+        else:
+            img_path_str = str(image_path)
+
+        if not img_path_str:  # 빈 문자열인 경우
+            img_path_str = None
+            has_image_input = bool(image)  # image 객체만 확인
+        else:
+            img_path_str = (
+                str(image_path) if isinstance(image_path, Path) else img_path_str
+            )
+
+    # 최대 토큰 설정
+    max_output_tokens = max_tokens or 65000
+
+    system_prompt, user_prompt = get_answer_question_prompt(
+        question,
+        lecture_context,
+        has_image=has_image_input,
+        subject_name=subject_name,
+    )
+
+    try:
+        # 스트리밍 모드로 호출
+        for chunk in llm_client.call_stream(
+            prompt=user_prompt,
+            system_prompt=system_prompt,
+            temperature=temperature,
+            max_tokens=max_output_tokens,
+            image_path=img_path_str,
+            image=image,
+        ):
+            yield chunk
+    except Exception as e:  # pragma: no cover - 외부 API 예외
+        raise RuntimeError(f"질문 답변 스트리밍 생성 중 오류 발생: {str(e)}")
 
 
 if __name__ == "__main__":  # pragma: no cover - 로컬 테스트 전용

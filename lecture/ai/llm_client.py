@@ -255,6 +255,111 @@ class LLMClient:
         except Exception as e:  # pragma: no cover - 외부 API 예외
             raise RuntimeError(f"Gemini API 호출 중 오류 발생: {str(e)}")
 
+    def call_stream(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+        image_path: Optional[str] = None,
+        image: Optional[Any] = None,
+        **kwargs,
+    ):
+        """
+        Gemini API 스트리밍 호출 (텍스트 및 이미지 지원)
+        제너레이터로 응답을 청크 단위로 반환합니다.
+
+        Args:
+            prompt: 사용자 프롬프트
+            system_prompt: 시스템 프롬프트 (선택) - Gemini는 system_instruction로 전달
+            temperature: 모델 온도 (0.0-2.0)
+            max_tokens: 최대 토큰 수 (max_output_tokens로 변환)
+            image_path: 이미지 파일 경로 또는 URL (선택)
+            image: PIL Image 객체 또는 이미지 데이터 (선택, image_path와 함께 사용 불가)
+            **kwargs: 기타 API 파라미터
+
+        Yields:
+            str: 응답 텍스트 청크
+        """
+        # 시스템 프롬프트가 있으면 모델에 전달
+        if system_prompt:
+            model = genai.GenerativeModel(
+                model_name=self.model_name, system_instruction=system_prompt
+            )
+        else:
+            model = self.model
+
+        # 생성 설정 - dict로 전달
+        generation_config: Dict[str, Any] = {
+            "temperature": temperature,
+            **kwargs,
+        }
+
+        if max_tokens:
+            generation_config["max_output_tokens"] = max_tokens
+
+        # 이미지 처리
+        try:
+            from PIL import Image  # type: ignore
+        except ImportError:
+            raise ImportError(
+                "PIL (Pillow) 패키지가 설치되지 않았습니다. "
+                "이미지 처리를 위해 다음 명령어로 설치하세요: pip install Pillow"
+            )
+
+        content_parts: list[Union[str, Any]] = [prompt]
+
+        # image_path가 빈 문자열이거나 None이 아닌 경우만 처리
+        if image_path and str(image_path).strip():
+            try:
+                # URL인 경우 requests로 다운로드 시도
+                if str(image_path).startswith(("http://", "https://")):
+                    try:
+                        import requests
+                        from io import BytesIO
+
+                        headers = {
+                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+                        }
+                        response = requests.get(image_path, headers=headers, timeout=10)
+                        response.raise_for_status()
+                        img = Image.open(BytesIO(response.content))
+                        content_parts.append(img)
+                    except ImportError:
+                        raise ValueError(
+                            "URL 이미지를 사용하려면 requests 패키지가 필요합니다: pip install requests"
+                        )
+                    except Exception as e:
+                        raise ValueError(f"URL에서 이미지를 다운로드하는데 실패했습니다: {e}")
+                else:
+                    # 파일 경로에서 이미지 로드
+                    img_path = Path(image_path)
+                    if not img_path.exists():
+                        raise ValueError(f"이미지 파일을 찾을 수 없습니다: {image_path}")
+                    img = Image.open(img_path)
+                    content_parts.append(img)
+            except Exception as e:
+                raise ValueError(f"이미지 파일 로드 실패 ({image_path}): {e}")
+
+        try:
+            # 스트리밍 모드로 호출
+            response_stream = model.generate_content(
+                content_parts,
+                generation_config=generation_config,
+                stream=True,
+            )
+
+            # 스트리밍 응답 처리
+            for chunk in response_stream:
+                if chunk.candidates and len(chunk.candidates) > 0:
+                    candidate = chunk.candidates[0]
+                    if candidate.content and candidate.content.parts:
+                        for part in candidate.content.parts:
+                            if hasattr(part, "text") and part.text:
+                                yield part.text
+        except Exception as e:  # pragma: no cover - 외부 API 예외
+            raise RuntimeError(f"Gemini API 스트리밍 호출 중 오류 발생: {str(e)}")
+
     def call_with_json(
         self,
         prompt: str,
