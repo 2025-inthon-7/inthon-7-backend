@@ -20,7 +20,7 @@ def answer_question(
     image: Optional[Any] = None,
     llm_client: Optional[LLMClient] = None,
     temperature: float = 0.7,
-    max_tokens: Optional[int] = 4096,
+    max_tokens: Optional[int] = 65000,
     subject_name: Optional[str] = None,
 ) -> str:
     """
@@ -33,7 +33,7 @@ def answer_question(
         image: PIL Image 객체 또는 이미지 데이터 (선택, image_path와 함께 사용 불가)
         llm_client: LLM 클라이언트 인스턴스 (없으면 기본 인스턴스 사용)
         temperature: 모델 온도 (기본값: 0.7)
-        max_tokens: 최대 토큰 수 (기본값: 4096, 이미지 포함 시 자동 증가)
+        max_tokens: 최대 토큰 수 (기본값: 65000)
         subject_name: 과목명 (예: "자료구조", "알고리즘" 등) (선택)
 
     Returns:
@@ -68,11 +68,8 @@ def answer_question(
                 str(image_path) if isinstance(image_path, Path) else img_path_str
             )
 
-    # 이미지가 포함된 경우 더 많은 토큰 필요
-    if has_image_input:
-        max_output_tokens = 8192 if (not max_tokens or max_tokens < 8192) else max_tokens
-    else:
-        max_output_tokens = max_tokens or 4096
+    # 최대 토큰 설정
+    max_output_tokens = max_tokens or 65000
 
     system_prompt, user_prompt = get_answer_question_prompt(
         question,
