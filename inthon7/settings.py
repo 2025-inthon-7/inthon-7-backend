@@ -28,12 +28,25 @@ load_dotenv(BASE_DIR / ".env")
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-(w$dlfg1(j6c5*qkz1nioy)9oi$har$be!j%od$h8g*ppczvrm'
+# - 로컬 개발에서는 기본값 사용
+# - 서버(GCE 등)에서는 DJANGO_SECRET_KEY 환경변수로 주입
+SECRET_KEY = os.environ.get(
+    "DJANGO_SECRET_KEY",
+    "django-insecure-(w$dlfg1(j6c5*qkz1nioy)9oi$har$be!j%od$h8g*ppczvrm",
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# - 로컬 개발: 기본 True
+# - 서버(GCE 등): DJANGO_DEBUG=false 로 두는 것을 권장
+DEBUG = os.environ.get("DJANGO_DEBUG", "True").lower() == "true"
 
-ALLOWED_HOSTS = ['0.0.0.0', 'localhost', '127.0.0.1']
+# ALLOWED_HOSTS
+# - 기본: 로컬 개발 호스트
+# - 서버(GCE 등): DJANGO_ALLOWED_HOSTS 환경변수로 IP/도메인 설정 (쉼표 구분)
+ALLOWED_HOSTS = os.environ.get(
+    "DJANGO_ALLOWED_HOSTS",
+    "0.0.0.0,localhost,127.0.0.1",
+).split(",")
 
 
 # Application definition
@@ -127,7 +140,9 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = "static/"
+# collectstatic 결과가 모일 경로 (예: GCE에서 nginx가 서빙)
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
