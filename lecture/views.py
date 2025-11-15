@@ -28,6 +28,7 @@ from .models import (
     ImportantMoment,
     Question,
     Session,
+    QuestionLike,
 )
 from .serializers import (
     AIAnswerResponseSerializer,
@@ -579,18 +580,65 @@ def forward_question_to_professor(request, question_id: int):
     question.status = Question.Status.FORWARDED
     question.save()
 
-    # 교수 그룹 WebSocket으로 알림
+    # 교수 및 학생 그룹 WebSocket으로 알림
     channel_layer = get_channel_layer()
+    payload = {
+        "type": "new_question",
+        "question_id": question.id,
+        "cleaned_text": cleaned_for_answer,
+        "capture_url": screenshot_url,
+        "created_at": question.updated_at.isoformat(),
+    }
     async_to_sync(channel_layer.group_send)(
         get_session_group_name(question.session_id, "teacher"),
-        {
-            "type": "new_question",
-            "question_id": question.id,
-            "cleaned_text": cleaned_for_answer,
-            "capture_url": screenshot_url,
-            "created_at": question.updated_at.isoformat(),
-        },
+        payload,
     )
+    async_to_sync(channel_layer.group_send)(
+        get_session_group_name(question.session_id, "student"),
+        payload,
+    )
+
+    return Response({"status": "ok"})
+
+
+@extend_schema(
+    request=None,
+    responses=SimpleStatusResponseSerializer,
+)
+@api_view(["POST"])
+def like_question(request, question_id: int):
+    """
+    학생: '나도 궁금해요'
+    """
+    question = get_object_or_404(Question, id=question_id)
+    device_hash = get_device_hash(request)
+
+    # QuestionLike 생성 (이미 있으면 무시)
+    like, created = QuestionLike.objects.get_or_create(
+        question=question,
+        device_hash=device_hash,
+    )
+
+    if created:
+        # "나도 궁금해요" 카운트 브로드캐스트
+        like_count = question.likes.count()
+        session_id = question.session_id
+
+        channel_layer = get_channel_layer()
+        payload = {
+            "type": "question_like_update",
+            "question_id": question.id,
+            "like_count": like_count,
+        }
+        # 교수와 학생 모두에게 보낸다
+        async_to_sync(channel_layer.group_send)(
+            get_session_group_name(session_id, "teacher"),
+            payload,
+        )
+        async_to_sync(channel_layer.group_send)(
+            get_session_group_name(session_id, "student"),
+            payload,
+        )
 
     return Response({"status": "ok"})
 

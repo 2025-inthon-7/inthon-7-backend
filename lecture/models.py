@@ -105,6 +105,16 @@ class Question(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+
+class QuestionLike(models.Model):
+    question = models.ForeignKey(Question, related_name="likes", on_delete=models.CASCADE)
+    device_hash = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        unique_together = ('question', 'device_hash')
+
+
 class ImportantMoment(models.Model):
     TRIGGER_CHOICES = (
         ('MANUAL', 'Professor marked important'),

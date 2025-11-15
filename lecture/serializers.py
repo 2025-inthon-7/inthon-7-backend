@@ -19,6 +19,8 @@ class SessionSerializer(serializers.ModelSerializer):
 
 
 class QuestionSerializer(serializers.ModelSerializer):
+    like_count = serializers.SerializerMethodField()
+
     class Meta:
         model = Question
         fields = [
@@ -30,6 +32,7 @@ class QuestionSerializer(serializers.ModelSerializer):
             "ai_answer",
             "forwarded_to_professor",
             "status",
+            "like_count",
             "created_at",
             "updated_at",
         ]
@@ -39,9 +42,14 @@ class QuestionSerializer(serializers.ModelSerializer):
             "ai_answer",
             "forwarded_to_professor",
             "status",
+            "like_count",
             "created_at",
             "updated_at",
         ]
+
+    def get_like_count(self, obj: Question) -> int:
+        # 'likes'는 QuestionLike 모델의 related_name
+        return obj.likes.count()
 
 
 class ImportantMomentSerializer(serializers.ModelSerializer):

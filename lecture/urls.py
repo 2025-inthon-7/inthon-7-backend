@@ -44,6 +44,11 @@ urlpatterns = [
         name="forward_question_to_professor",
     ),
     path(
+        "questions/<int:question_id>/like/",
+        views.like_question,
+        name="like_question",
+    ),
+    path(
         "sessions/<uuid:session_id>/questions/",
         views.list_session_questions,
         name="list_session_questions",
