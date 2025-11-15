@@ -59,18 +59,18 @@ class LLMClient:
                 "api_key를 전달하세요."
             )
 
-        # Gemini API 구성
+        # Gemini API
         genai.configure(api_key=self.api_key)
         self.model_name = model
 
-        # models/ 접두사 제거 (자동으로 붙음)
+        # models/ 접두사 제거 
         if self.model_name.startswith("models/"):
             self.model_name = self.model_name.replace("models/", "")
 
         try:
             self.model = genai.GenerativeModel(model_name=self.model_name)
         except Exception as e:
-            # 모델 이름이 잘못되었을 경우 사용 가능한 모델 자동 감지
+            # 모델 이름이 상이할 경우 사용 가능한 모델 자동 감지
             print(f"경고: 모델 {model}을 사용할 수 없습니다. 사용 가능한 모델을 찾는 중... (오류: {e})")
             try:
                 available_models = [
@@ -131,22 +131,22 @@ class LLMClient:
         # -----------------------------
         # 디버그용 프롬프트 출력 TODO: 나중에 제거
         # -----------------------------
-        try:
-            print("\n[AI DEBUG] ===== LLM CALL START =====")
-            print(f"[AI DEBUG] model_name: {self.model_name}")
-            print(f"[AI DEBUG] temperature: {temperature}, max_tokens: {max_tokens}")
-            if system_prompt:
-                print("[AI DEBUG] --- system_prompt ---")
-                print(system_prompt)
-                print("[AI DEBUG] --- end system_prompt ---")
-            print("[AI DEBUG] --- user_prompt ---")
-            print(prompt)
-            print("[AI DEBUG] --- end user_prompt ---")
-            print(f"[AI DEBUG] image_path: {image_path}, has_image: {bool(image_path or image)}")
-            print("[AI DEBUG] =====  LLM CALL END (prompt dump) =====\n")
-        except Exception:
-            # 디버그 출력 자체가 실패하더라도 LLM 호출은 계속 진행
-            pass
+        # try:
+        #     print("\n[AI DEBUG] ===== LLM CALL START =====")
+        #     print(f"[AI DEBUG] model_name: {self.model_name}")
+        #     print(f"[AI DEBUG] temperature: {temperature}, max_tokens: {max_tokens}")
+        #     if system_prompt:
+        #         print("[AI DEBUG] --- system_prompt ---")
+        #         print(system_prompt)
+        #         print("[AI DEBUG] --- end system_prompt ---")
+        #     print("[AI DEBUG] --- user_prompt ---")
+        #     print(prompt)
+        #     print("[AI DEBUG] --- end user_prompt ---")
+        #     print(f"[AI DEBUG] image_path: {image_path}, has_image: {bool(image_path or image)}")
+        #     print("[AI DEBUG] =====  LLM CALL END (prompt dump) =====\n")
+        # except Exception:
+        #     # 디버그 출력 자체가 실패하더라도 LLM 호출은 계속 진행
+        #     pass
 
         # 시스템 프롬프트가 있으면 모델에 전달
         if system_prompt:
@@ -156,7 +156,7 @@ class LLMClient:
         else:
             model = self.model
 
-        # 생성 설정 - dict로 전달
+        # 생성 설정 
         generation_config: Dict[str, Any] = {
             "temperature": temperature,
             **kwargs,

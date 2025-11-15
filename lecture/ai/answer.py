@@ -93,20 +93,20 @@ def answer_question(
         raise RuntimeError(f"질문 답변 생성 중 오류 발생: {str(e)}")
 
 
-if __name__ == "__main__":  # pragma: no cover - 로컬 테스트 전용
-    # 로컬 테스트
-    test_question = "파이썬에서 리스트와 튜플의 차이점이 뭐에요?"
-    test_context = """
-    오늘 강의에서는 파이썬의 기본 데이터 구조에 대해 배웠습니다.
-    리스트는 순서가 있는 가변 데이터 구조이고,
-    튜플은 순서가 있지만 불변 데이터 구조입니다.
-    """
+# if __name__ == "__main__":  # pragma: no cover - 로컬 테스트 전용
+#     # 로컬 테스트
+#     test_question = "파이썬에서 리스트와 튜플의 차이점이 뭐에요?"
+#     test_context = """
+#     오늘 강의에서는 파이썬의 기본 데이터 구조에 대해 배웠습니다.
+#     리스트는 순서가 있는 가변 데이터 구조이고,
+#     튜플은 순서가 있지만 불변 데이터 구조입니다.
+#     """
 
-    try:
-        answer = answer_question(test_question, test_context)
-        print(f"질문: {test_question}")
-        print(f"\n답변:\n{answer}")
-    except Exception as e:
-        print(f"오류: {e}")
+#     try:
+#         answer = answer_question(test_question, test_context)
+#         print(f"질문: {test_question}")
+#         print(f"\n답변:\n{answer}")
+#     except Exception as e:
+#         print(f"오류: {e}")
 
 

@@ -87,14 +87,14 @@ def clean_question(
         raise RuntimeError(f"질문 정제 중 오류 발생: {str(e)}")
 
 
-if __name__ == "__main__":  # pragma: no cover - 로컬 테스트 전용
-    # 로컬 테스트
-    test_question = "파이썬에서 리스트와 튜플의 차이점이 뭐에요? 그리고 언제 사용해야 하는지 궁금해요"
-    try:
-        result = clean_question(test_question)
-        print(f"원본: {test_question}")
-        print(f"정제: {result}")
-    except Exception as e:
-        print(f"오류: {e}")
+# if __name__ == "__main__":  # pragma: no cover - 로컬 테스트 전용
+#     # 로컬 테스트
+#     test_question = "파이썬에서 리스트와 튜플의 차이점이 뭐에요? 그리고 언제 사용해야 하는지 궁금해요"
+#     try:
+#         result = clean_question(test_question)
+#         print(f"원본: {test_question}")
+#         print(f"정제: {result}")
+#     except Exception as e:
+#         print(f"오류: {e}")
 
 
