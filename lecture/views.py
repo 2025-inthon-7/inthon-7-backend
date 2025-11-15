@@ -7,7 +7,7 @@ from uuid import UUID
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
-from django.db.models import Count
+from django.db.models import Case, Count, When
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from drf_spectacular.utils import (
@@ -731,6 +731,21 @@ def list_session_questions(request, session_id: UUID):
     return Response(serializer.data)
 
 
+@extend_schema(
+    responses=QuestionSerializer,
+)
+@api_view(["GET"])
+def get_question(request, question_id: int):
+    """
+    ID로 특정 질문 조회
+
+    Path parameters:
+    - `id` (integer): Question ID
+    """
+    question = get_object_or_404(Question, id=question_id)
+    serializer = QuestionSerializer(question)
+    return Response(serializer.data)
+
 
 # ------------------------
 # '중요해요' + HARD 구간 캡처
@@ -917,28 +932,6 @@ def session_summary(request, session_id: UUID):
         session.save(update_fields=["hardest_moments_calculated"])
 
 
-    first_feedback = (
-        FeedbackEvent.objects.filter(session=session)
-        .order_by("created_at")
-        .first()
-    )
-    last_feedback = (
-        FeedbackEvent.objects.filter(session=session)
-        .order_by("-created_at")
-        .first()
-    )
-    first_q = Question.objects.filter(session=session).order_by("created_at").first()
-    last_q = Question.objects.filter(session=session).order_by("-created_at").first()
-    first_m = (
-        ImportantMoment.objects.filter(session=session)
-        .order_by("created_at")
-        .first()
-    )
-    last_m = (
-        ImportantMoment.objects.filter(session=session)
-        .order_by("-created_at")
-        .first()
-    )
 
 
     # feedback 집계
@@ -956,10 +949,20 @@ def session_summary(request, session_id: UUID):
     manual_moments = ImportantMoment.objects.filter(session=session, trigger="MANUAL")
 
     # 2. Question 나도 궁금해요 상위 5개 (동율이면 앞쪽걸로...) ImportantMoment
+    prioritized_statuses = [
+        Question.Status.FORWARDED,
+        Question.Status.PROFESSOR_ANSWERED,
+    ]
     top_questions = (
         Question.objects.filter(session=session)
-        .annotate(like_count=Count("likes"))
-        .order_by("-like_count", "created_at")[:5]
+        .annotate(
+            like_count=Count("likes"),
+            priority=Case(
+                When(status__in=prioritized_statuses, then=1),
+                default=2,
+            ),
+        )
+        .order_by("priority", "-like_count", "created_at")[:5]
     )
     top_question_ids = [q.id for q in top_questions]
     question_moments = ImportantMoment.objects.filter(
