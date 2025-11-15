@@ -63,11 +63,13 @@ INSTALLED_APPS = [
     'channels',
     'storages',
     'lecture',
+    'corsheaders',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -128,9 +130,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'ko-kr'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Seoul'
 
 USE_I18N = True
 
@@ -159,6 +161,13 @@ CHANNEL_LAYERS = {
         },
     }
 }
+
+# Celery 설정 (Redis를 브로커/결과 백엔드로 사용)
+CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", REDIS_URL)
+CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", REDIS_URL)
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
 
 GS_BUCKET_NAME = "inthon7-bucket"
 
@@ -211,4 +220,59 @@ SPECTACULAR_SETTINGS = {
     "TITLE": "InThon API",
     "DESCRIPTION": "API documentation for InThon lecture service",
     "VERSION": "1.0.0",
+}
+
+CORS_ORIGIN_ALLOW_ALL = True # TODO: 변경
+
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+    "x-device-hash",
+]
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+        },
+    },
+    # root 로거: 모든 로그를 콘솔로
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
+    },
+    # Django 요청/응답 관련 에러 (traceback 포함)
+    "loggers": {
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": True,
+        },
+        # 필요하면 django 전체 로그도 보고 싶을 때
+        "django": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": True,
+        },
+        # uvicorn 에러도 같이 보고 싶으면
+        "uvicorn.error": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": True,
+        },
+        "uvicorn.access": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
 }

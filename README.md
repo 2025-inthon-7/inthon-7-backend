@@ -78,13 +78,17 @@
 - **teacher 그룹으로 가는 이벤트 (교수만 수신)**
   - `feedback` — 학생의 이해도 피드백
   - `question_intent` — 학생이 질문을 시작했음을 알림
-  - `new_question` — 학생의 질문 + 캡처가 교수에게 도착했음을 알림
 
 - **student 그룹으로 가는 이벤트 (학생만 수신)**
   - `question_capture` — 특정 질문에 대한 캡처 도착
   - `important` — 교수의 “중요해요” 구간 표시
   - `hard_alert` — “어려워요” 비율이 threshold 를 넘은 구간
   - `teacher_presence` — 교수 접속 여부(온라인/오프라인) 상태 변경
+
+- **teacher + student 모두에게 가는 이벤트 (교수, 학생 모두 수신)**
+  - `new_question` — 학생의 질문 + 캡처가 모두에게 공유됨
+  - `question_like_update` — '나도 궁금해요' 카운트 업데이트
+  - `session_ended` — 강의(세션) 종료
 
 
 #### 5.2 teacher 그룹용 브로드캐스트 상세
@@ -100,7 +104,7 @@
     ```json
     {
       "event": "feedback",
-      "feedback_type": "understand" | "hard",
+      "feedback_type": "OK" | "HARD",
       "created_at": "2025-11-15T12:34:56.789Z"
     }
     ```
@@ -115,22 +119,6 @@
     {
       "event": "question_intent",
       "question_id": 123,
-      "created_at": "2025-11-15T12:34:56.789Z"
-    }
-    ```
-
-- **3) new_question**
-
-  - 의미: 정제된 질문 내용과 관련 캡처가 교수에게 도착했음을 알림
-  - 핸들러: `new_question`
-  - 페이로드 예시:
-
-    ```json
-    {
-      "event": "new_question",
-      "question_id": 123,
-      "cleaned_text": "질문의 정제된 텍스트 내용",
-      "capture_url": "https://example.com/capture.png",
       "created_at": "2025-11-15T12:34:56.789Z"
     }
     ```
@@ -170,22 +158,7 @@
     }
     ```
 
-- **3) hard_alert**
-
-  - 의미: 프론트에서 “어려워요” 비율이 특정 threshold 를 넘었다고 판단해, 해당 구간의 캡처를 학생에게 알릴 때
-  - 핸들러: `hard_alert`
-  - 페이로드 예시:
-
-    ```json
-    {
-      "event": "hard_alert",
-      "capture_url": "https://example.com/hard.png",
-      "hard_ratio": 0.7,
-      "created_at": "2025-11-15T12:34:56.789Z"
-    }
-    ```
-
-- **4) teacher_presence**
+- **3) teacher_presence**
 
   - 의미: 교수 WebSocket 접속/해제에 따라 **교수 온라인/오프라인 상태가 변경**되었음을 학생에게 알림
   - 핸들러: `teacher_presence`
@@ -200,5 +173,66 @@
       "event": "teacher_presence",
       "is_online": true,
       "changed_at": "2025-11-15T12:34:56.789Z"
+    }
+    ```
+
+
+#### 5.4 공통 브로드캐스트 상세 (교수, 학생 모두 수신)
+
+이 섹션의 모든 이벤트는 **`teacher` 및 `student` 그룹 모두에게** 전송됩니다.
+
+- **1) new_question**
+
+  - 의미: 정제된 질문 내용과 관련 캡처가 모두에게 도착했음을 알림
+  - 핸들러: `new_question`
+  - 페이로드 예시:
+
+    ```json
+    {
+      "event": "new_question",
+      "question_id": 123,
+      "cleaned_text": "질문의 정제된 텍스트 내용",
+      "capture_url": "https://example.com/capture.png",
+      "created_at": "2025-11-15T12:34:56.789Z"
+    }
+    ```
+
+- **2) question_like_update**
+
+  - 의미: '나도 궁금해요' 카운트가 업데이트되었음을 알림
+  - 핸들러: `question_like_update`
+  - 페이로드 예시:
+
+    ```json
+    {
+      "event": "question_like_update",
+      "question_id": 123,
+      "like_count": 5
+    }
+    ```
+
+- **3) hard_alert**
+
+  - 의미: 프론트에서 “어려워요” 비율이 특정 threshold 를 넘었다고 판단해, 해당 구간의 캡처를 학생에게 알릴 때
+  - 핸들러: `hard_alert`
+  - 페이로드 예시:
+
+    ```json
+    {
+      "event": "hard_alert",
+      "capture_url": "https://example.com/hard.png",
+      "created_at": "2025-11-15T12:34:56.789Z"
+    }
+    ```
+
+- **4) session_ended**
+
+  - 의미: 교수가 세션을 종료했음을 알림. 클라이언트는 이 이벤트를 받으면 연결을 종료해야 함.
+  - 핸들러: `session_ended`
+  - 페이로드 예시:
+
+    ```json
+    {
+      "event": "session_ended"
     }
     ```

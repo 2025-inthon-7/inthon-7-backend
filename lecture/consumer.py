@@ -121,7 +121,7 @@ class SessionConsumer(AsyncWebsocketConsumer):
     async def new_question(self, event: Dict[str, Any]) -> None:
         """
         교수에게 전달된 '정제된 질문 + 캡처' 알림.
-        teacher 그룹에 보내기
+        교수/학생 그룹 모두에게 브로드캐스트
         """
         await self.send_json(
             {
@@ -144,6 +144,19 @@ class SessionConsumer(AsyncWebsocketConsumer):
                 "question_id": event.get("question_id"),
                 "capture_url": event.get("capture_url"),
                 "created_at": event.get("created_at"),
+            }
+        )
+
+    async def question_like_update(self, event: Dict[str, Any]) -> None:
+        """
+        '나도 궁금해요' 카운트 업데이트.
+        교수/학생 그룹 모두에게 브로드캐스트.
+        """
+        await self.send_json(
+            {
+                "event": "question_like_update",
+                "question_id": event.get("question_id"),
+                "like_count": event.get("like_count"),
             }
         )
 
@@ -170,10 +183,17 @@ class SessionConsumer(AsyncWebsocketConsumer):
             {
                 "event": "hard_alert",
                 "capture_url": event.get("capture_url"),
-                "hard_ratio": event.get("hard_ratio"),
                 "created_at": event.get("created_at"),
             }
         )
+
+    async def session_ended(self, event: Dict[str, Any]) -> None:
+        """
+        교수가 세션을 종료했을 때.
+        모든 클라이언트(교수/학생)에게 브로드캐스트.
+        """
+        await self.send_json({"event": "session_ended"})
+        await self.close()
 
     # ------------------------------------------------------------------
     # 유틸

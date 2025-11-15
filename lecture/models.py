@@ -63,6 +63,7 @@ class Session(models.Model):
     course = models.ForeignKey(Course, on_delete=models.CASCADE)
     date = models.DateField()
     is_active = models.BooleanField(default=True)
+    hardest_moments_calculated = models.BooleanField(default=False)
 
     class Meta:
         constraints = [
@@ -86,7 +87,8 @@ class Question(models.Model):
         TEXT_SUBMITTED = "TEXT_SUBMITTED", "Text submitted & cleaned"
         AI_ANSWERED = "AI_ANSWERED", "AI answered"
         FORWARDED = "FORWARDED", "Forwarded to professor"
-    
+        PROFESSOR_ANSWERED = "PROFESSOR_ANSWERED", "Professor answered"
+
     session = models.ForeignKey(Session, on_delete=models.CASCADE)
     device_hash = models.CharField(max_length=64)
     original_text = models.TextField()
@@ -105,6 +107,16 @@ class Question(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+
+class QuestionLike(models.Model):
+    question = models.ForeignKey(Question, related_name="likes", on_delete=models.CASCADE)
+    device_hash = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        unique_together = ('question', 'device_hash')
+
+
 class ImportantMoment(models.Model):
     TRIGGER_CHOICES = (
         ('MANUAL', 'Professor marked important'),
@@ -120,3 +132,4 @@ class ImportantMoment(models.Model):
         upload_to=important_moment_screenshot_upload_path, null=True, blank=True
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    is_hardest = models.BooleanField(default=False)

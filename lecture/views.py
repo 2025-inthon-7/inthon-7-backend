@@ -1,48 +1,58 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import timedelta
 from uuid import UUID
+
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from django.db.models import Count
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from rest_framework import status
-from rest_framework.decorators import api_view, parser_classes
-from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.response import Response
 from drf_spectacular.utils import (
     OpenApiResponse,
     extend_schema,
 )
-from .ai.clean import clean_question
-from .ai.answer import answer_question
+from rest_framework import status
+from rest_framework.decorators import api_view, parser_classes
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.response import Response
 
+from .ai.answer import answer_question
+from .ai.clean import clean_question
+from .ai.summarize_image import summarize_image as summarize_important_image
+from .tasks import generate_important_summary_task
 from .models import (
     Course,
-    Session,
     FeedbackEvent,
-    Question,
     ImportantMoment,
+    Question,
+    Session,
+    QuestionLike,
 )
 from .serializers import (
-    CourseSerializer,
-    SessionSerializer,
-    QuestionSerializer,
-    FeedbackSubmitSerializer,
-    SimpleStatusResponseSerializer,
-    QuestionIntentResponseSerializer,
-    QuestionCaptureResponseSerializer,
-    QuestionCaptureUploadSerializer,
-    QuestionTextSubmitSerializer,
-    QuestionTextResponseSerializer,
-    QuestionOverrideRequestSerializer,
     AIAnswerResponseSerializer,
+    CourseSerializer,
+    FeedbackSubmitSerializer,
     HardThresholdCaptureResponseSerializer,
     HardThresholdCaptureUploadSerializer,
     MarkImportantUploadSerializer,
+    QuestionCaptureResponseSerializer,
+    QuestionCaptureUploadSerializer,
+    QuestionIntentResponseSerializer,
+    QuestionOverrideRequestSerializer,
+    QuestionSerializer,
+    QuestionTextResponseSerializer,
+    QuestionTextSubmitSerializer,
+    SessionSerializer,
     SessionSummarySerializer,
+    SimpleStatusResponseSerializer,
+    ImportantMomentSimpleSerializer,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 # ------------------------
@@ -101,8 +111,7 @@ def ai_clean_question(
         )
         return cleaned
     except Exception as e:
-        # TODO: print 대신 logger 사용
-        print(f"Error in ai_clean_question: {e}")
+        logger.error("Error in ai_clean_question: %s", e)
         return original_text.strip()
 
 
@@ -126,9 +135,49 @@ def ai_answer_question(
         )
         return answer
     except Exception as e:
-        # TODO: print 대신 logger 사용
-        print(f"Error in ai_answer_question: {e}")
+        logger.error("Error in ai_answer_question: %s", e)
         return "AI 조교가 현재 답변을 생성할 수 없습니다. 잠시 후 다시 시도해 주세요."
+
+
+def ai_summarize_important_image(
+    image_path: str | None = None,
+    subject_name: str | None = None,
+) -> str | None:
+    """
+    교수님이 마크한 중요 구간 캡처 이미지를 1줄로 요약.
+
+    summarize_image 모듈을 thin-wrapper로 감싸고, 오류 시 None을 반환합니다.
+    """
+    logger.info(
+        "[AI DEBUG] ai_summarize_important_image called image_path=%s subject_name=%s",
+        image_path,
+        subject_name,
+    )
+
+    if not image_path:
+        logger.info(
+            "[AI DEBUG] ai_summarize_important_image: no image_path, skipping LLM"
+        )
+        return None
+
+    try:
+        logger.info(
+            "[AI DEBUG] ai_summarize_important_image: calling summarize_important_image"
+        )
+        summary = summarize_important_image(
+            image_path=image_path,
+            subject_name=subject_name,
+            temperature=0.3,
+        )
+        summary = summary.strip()
+        logger.info(
+            "[AI DEBUG] ai_summarize_important_image: summary_preview=%s",
+            summary[:200],
+        )
+        return summary or None
+    except Exception as e:
+        logger.error("[AI DEBUG] ai_summarize_important_image ERROR: %s", e)
+        return None
 
 
 # ------------------------
@@ -164,6 +213,38 @@ def get_today_session(request, course_code: str):
     return Response(data)
 
 
+@extend_schema(
+    request=None,
+    responses=SimpleStatusResponseSerializer,
+)
+@api_view(["POST"])
+def end_session(request, session_id: UUID):
+    """
+    교수: 강의(세션) 종료
+
+    Path parameters:
+    - `id` (UUID): 세션 ID
+    """
+    session = get_object_or_404(Session, id=session_id)
+    session.is_active = False
+    session.save(update_fields=["is_active"])
+
+    # 웹소켓으로 세션 종료 알림
+    channel_layer = get_channel_layer()
+    payload = {"type": "session_ended"}
+
+    async_to_sync(channel_layer.group_send)(
+        get_session_group_name(session_id, "teacher"),
+        payload,
+    )
+    async_to_sync(channel_layer.group_send)(
+        get_session_group_name(session_id, "student"),
+        payload,
+    )
+
+    return Response({"status": "ok"})
+
+
 # ------------------------
 # 피드백 (OK / HARD)
 # ------------------------
@@ -173,7 +254,6 @@ def get_today_session(request, course_code: str):
     responses={
         200: SimpleStatusResponseSerializer,
         400: OpenApiResponse(description="Invalid feedback_type"),
-        403: OpenApiResponse(description="Invalid device."),
         429: OpenApiResponse(description="Too many requests."),
     },
 )
@@ -183,7 +263,7 @@ def submit_feedback(request, session_id: UUID):
     학생: OK/HARD 피드백
 
     Path parameters:
-    - `id` (integer): 세션 ID
+    - `id` (UUID): 세션 ID
 
     Headers:
     - `X-Device-Hash` (string, optional): 익명 디바이스 ID (없으면 "anonymous")
@@ -249,7 +329,7 @@ def start_question_intent(request, session_id: UUID):
     - 응답으로 question_id를 돌려줌 → 학생/교수 둘 다 이 ID로 이후 API를 호출
 
     Path parameters:
-    - `id` (integer): 세션 ID
+    - `id` (UUID): 세션 ID
 
     Headers:
     - `X-Device-Hash` (string, optional)
@@ -321,10 +401,9 @@ def upload_question_capture(request, question_id: int):
     )
 
     capture_url = moment.screenshot_image.url
-    print(
-        "[DEBUG] upload_question_capture saved:",
+    logger.info(
+        "[DEBUG] upload_question_capture saved: %s -> %s",
         moment.screenshot_image.name,
-        "->",
         capture_url,
     )
 
@@ -534,20 +613,91 @@ def forward_question_to_professor(request, question_id: int):
     question.status = Question.Status.FORWARDED
     question.save()
 
-    # 교수 그룹 WebSocket으로 알림
+    # 교수 및 학생 그룹 WebSocket으로 알림
     channel_layer = get_channel_layer()
+    payload = {
+        "type": "new_question",
+        "question_id": question.id,
+        "cleaned_text": cleaned_for_answer,
+        "capture_url": screenshot_url,
+        "created_at": question.updated_at.isoformat(),
+    }
     async_to_sync(channel_layer.group_send)(
         get_session_group_name(question.session_id, "teacher"),
-        {
-            "type": "new_question",
-            "question_id": question.id,
-            "cleaned_text": cleaned_for_answer,
-            "capture_url": screenshot_url,
-            "created_at": question.updated_at.isoformat(),
-        },
+        payload,
+    )
+    async_to_sync(channel_layer.group_send)(
+        get_session_group_name(question.session_id, "student"),
+        payload,
     )
 
     return Response({"status": "ok"})
+
+
+@extend_schema(
+    request=None,
+    responses=SimpleStatusResponseSerializer,
+)
+@api_view(["POST"])
+def like_question(request, question_id: int):
+    """
+    학생: '나도 궁금해요'
+
+    Path parameters:
+    - `id` (integer): Question ID
+    """
+    question = get_object_or_404(Question, id=question_id)
+    device_hash = get_device_hash(request)
+
+    # QuestionLike 생성 (이미 있으면 무시)
+    like, created = QuestionLike.objects.get_or_create(
+        question=question,
+        device_hash=device_hash,
+    )
+
+    if created:
+        # "나도 궁금해요" 카운트 브로드캐스트
+        like_count = question.likes.count()
+        session_id = question.session_id
+
+        channel_layer = get_channel_layer()
+        payload = {
+            "type": "question_like_update",
+            "question_id": question.id,
+            "like_count": like_count,
+        }
+        # 교수와 학생 모두에게 보낸다
+        async_to_sync(channel_layer.group_send)(
+            get_session_group_name(session_id, "teacher"),
+            payload,
+        )
+        async_to_sync(channel_layer.group_send)(
+            get_session_group_name(session_id, "student"),
+            payload,
+        )
+
+    return Response({"status": "ok"})
+
+
+@extend_schema(
+    request=None,
+    responses=QuestionSerializer,
+)
+@api_view(["POST"])
+def answer_question_by_professor(request, question_id: int):
+    """
+    교수: 질문에 '답변 완료'로 상태 변경
+
+    Path parameters:
+    - `id` (integer): Question ID
+    """
+    question = get_object_or_404(Question, id=question_id)
+
+    question.status = Question.Status.PROFESSOR_ANSWERED
+    question.save(update_fields=["status"])
+
+    response_serializer = QuestionSerializer(question)
+    return Response(response_serializer.data)
 
 
 @extend_schema(
@@ -559,7 +709,7 @@ def list_session_questions(request, session_id: UUID):
     교수: 세션 질문 목록
 
     Path parameters:
-    - `id` (integer): 세션 ID
+    - `id` (UUID): 세션 ID
 
     Query parameters:
     - `forwarded_only` (string, optional): "true" 인 경우 교수에게 전달된 질문만
@@ -582,7 +732,7 @@ def list_session_questions(request, session_id: UUID):
 
 @extend_schema(
     request=MarkImportantUploadSerializer,
-    responses=QuestionCaptureResponseSerializer,
+    responses=ImportantMomentSimpleSerializer,
 )
 @api_view(["POST"])
 @parser_classes([MultiPartParser, FormParser])
@@ -595,7 +745,7 @@ def mark_important(request, session_id: UUID):
       - screenshot (optional)
 
     Path parameters:
-    - `id` (integer): 세션 ID
+    - `id` (UUID): 세션 ID
 
     Request body (multipart/form-data):
     - `note` (string, optional): 메모, 예: "중요 개념"
@@ -603,39 +753,52 @@ def mark_important(request, session_id: UUID):
     """
     session = get_object_or_404(Session, id=session_id, is_active=True)
 
-    note = request.data.get("note", "")
+    # 사용자가 직접 입력한 메모 (optional)
+    raw_note = request.data.get("note", "") or ""
     screenshot = request.FILES.get("screenshot")
+    logger.info(
+        "[AI DEBUG] mark_important called session_id=%s has_screenshot=%s raw_note=%r",
+        session_id,
+        bool(screenshot),
+        raw_note,
+    )
 
+    # 1차로 ImportantMoment를 생성해서 파일을 디스크에 저장
     moment = ImportantMoment.objects.create(
         session=session,
         trigger="MANUAL",
-        note=note,
+        note=raw_note,
         screenshot_image=screenshot,
     )
 
     capture_url = moment.screenshot_image.url if screenshot else None
-    if screenshot:
-        print(
-            "[DEBUG] mark_important saved:",
-            moment.screenshot_image.name,
-            "->",
-            capture_url,
-        )
-
-    # 학생 그룹에만 브로드캐스트
+    logger.info(
+        "[AI DEBUG] mark_important saved ImportantMoment id=%s capture_url=%s",
+        moment.id,
+        capture_url,
+    )
+    
+    # 학생 그룹에  브로드캐스트
     channel_layer = get_channel_layer()
     async_to_sync(channel_layer.group_send)(
         get_session_group_name(session_id, "student"),
         {
             "type": "important_message",
-            "note": note,
+            "note": raw_note,
             "capture_url": capture_url,
             "created_at": moment.created_at.isoformat(),
         },
     )
 
+    # Celery 비동기 작업으로 요약 생성 및 note 업데이트만 수행
+    generate_important_summary_task.delay(
+        moment_id=moment.id,
+        session_id_str=str(session_id),
+        raw_note=raw_note,
+    )
+
     return Response(
-        {"id": moment.id, "note": note, "capture_url": capture_url},
+        {"id": moment.id, "note": raw_note, "capture_url": capture_url},
         status=status.HTTP_201_CREATED,
     )
 
@@ -679,10 +842,9 @@ def hard_threshold_capture(request, session_id: UUID):
     )
 
     capture_url = moment.screenshot_image.url
-    print(
-        "[DEBUG] hard_threshold_capture saved:",
+    logger.info(
+        "[DEBUG] hard_threshold_capture saved: %s -> %s",
         moment.screenshot_image.name,
-        "->",
         capture_url,
     )
     channel_layer = get_channel_layer()
@@ -692,13 +854,9 @@ def hard_threshold_capture(request, session_id: UUID):
         "created_at": moment.created_at.isoformat(),
     }
 
-    # 학생 + 교수 둘 다에게 알림
+    # 학생에게만 알림
     async_to_sync(channel_layer.group_send)(
         get_session_group_name(session_id, "student"),
-        payload,
-    )
-    async_to_sync(channel_layer.group_send)(
-        get_session_group_name(session_id, "teacher"),
         payload,
     )
 
@@ -721,9 +879,36 @@ def session_summary(request, session_id: UUID):
     수업 Summary
 
     Path parameters:
-    - `id` (integer): 세션 ID
+    - `id` (UUID): 세션 ID
     """
     session = get_object_or_404(Session, id=session_id)
+
+    if not session.is_active and not session.hardest_moments_calculated:
+        hard_moments = ImportantMoment.objects.filter(session=session, trigger="HARD")
+
+        moment_hard_counts = []
+        for moment in hard_moments:
+            start_time = moment.created_at - timedelta(minutes=1)
+            end_time = moment.created_at + timedelta(minutes=1)
+            hard_feedback_count = FeedbackEvent.objects.filter(
+                session=session,
+                feedback_type="HARD",
+                created_at__range=(start_time, end_time),
+            ).count()
+            moment_hard_counts.append((moment, hard_feedback_count))
+
+        moment_hard_counts.sort(key=lambda x: (x[1], x[0].created_at), reverse=True)
+
+        top_5_moments = [item[0] for item in moment_hard_counts[:5]]
+        top_5_moment_ids = [m.id for m in top_5_moments]
+
+        if top_5_moment_ids:
+            ImportantMoment.objects.filter(id__in=top_5_moment_ids).update(
+                is_hardest=True
+            )
+
+        session.hardest_moments_calculated = True
+        session.save(update_fields=["hardest_moments_calculated"])
 
 
     first_feedback = (
@@ -761,7 +946,32 @@ def session_summary(request, session_id: UUID):
 
 
     # important moments
-    moments_qs = ImportantMoment.objects.filter(session=session).order_by("created_at")
+    # 1. 교수님이 mark_import 한 ImportantMoment 전체
+    manual_moments = ImportantMoment.objects.filter(session=session, trigger="MANUAL")
+
+    # 2. Question 나도 궁금해요 상위 5개 (동율이면 앞쪽걸로...) ImportantMoment
+    top_questions = (
+        Question.objects.filter(session=session)
+        .annotate(like_count=Count("likes"))
+        .order_by("-like_count", "created_at")[:5]
+    )
+    top_question_ids = [q.id for q in top_questions]
+    question_moments = ImportantMoment.objects.filter(
+        session=session, trigger="QUESTION", question_id__in=top_question_ids
+    )
+
+    # 3. 5개의 Hardest ImportantMoment
+    hardest_moments = ImportantMoment.objects.filter(session=session, is_hardest=True)
+
+    # 3가지 종류 조합 후 시간 순 정렬
+    moment_ids = set()
+    moment_ids.update(manual_moments.values_list("id", flat=True))
+    moment_ids.update(question_moments.values_list("id", flat=True))
+    moment_ids.update(hardest_moments.values_list("id", flat=True))
+
+    moments_qs = ImportantMoment.objects.filter(id__in=list(moment_ids)).order_by(
+        "created_at"
+    )
     moments_data = [
         {
             "id": m.id,
@@ -770,6 +980,7 @@ def session_summary(request, session_id: UUID):
             "capture_url": m.screenshot_image.url if m.screenshot_image else None,
             "created_at": m.created_at.isoformat(),
             "question_id": m.question_id,
+            "is_hardest": m.is_hardest,
         }
         for m in moments_qs
     ]

@@ -9,6 +9,11 @@ urlpatterns = [
         views.get_today_session,
         name="get_today_session",
     ),
+    path(
+        "sessions/<uuid:session_id>/end/",
+        views.end_session,
+        name="end_session",
+    ),
 
     # Feedback (Session UUID)
     path(
@@ -42,6 +47,16 @@ urlpatterns = [
         "questions/<int:question_id>/forward/",
         views.forward_question_to_professor,
         name="forward_question_to_professor",
+    ),
+    path(
+        "questions/<int:question_id>/like/",
+        views.like_question,
+        name="like_question",
+    ),
+    path(
+        "questions/<int:question_id>/answer/",
+        views.answer_question_by_professor,
+        name="answer_question_by_professor",
     ),
     path(
         "sessions/<uuid:session_id>/questions/",
