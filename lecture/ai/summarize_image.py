@@ -40,7 +40,8 @@ def summarize_image(
         raise ValueError("image_path 또는 image 중 하나는 필수입니다.")
 
     if llm_client is None:
-        llm_client = get_default_client()
+        # summarize 함수는 flash 모델 사용 (정확도가 중요하므로)
+        llm_client = LLMClient(model="gemini-2.5-flash")
 
     # 이미지 경로를 문자열로 변환
     img_path_str: Optional[str] = None
@@ -83,12 +84,12 @@ def summarize_image(
         raise RuntimeError(f"이미지 요약 중 오류 발생: {str(e)}")
 
 
-if __name__ == "__main__":  # pragma: no cover - 로컬 테스트 전용
-    # 로컬 테스트
-    test_image_path = "path/to/test/image.png"
-    try:
-        result = summarize_image(image_path=test_image_path)
-        print(f"이미지 요약: {result}")
-    except Exception as e:
-        print(f"오류: {e}")
+# if __name__ == "__main__":  # pragma: no cover - 로컬 테스트 전용
+#     # 로컬 테스트
+#     test_image_path = "path/to/test/image.png"
+#     try:
+#         result = summarize_image(image_path=test_image_path)
+#         print(f"이미지 요약: {result}")
+#     except Exception as e:
+#         print(f"오류: {e}")
 
