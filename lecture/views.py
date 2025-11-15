@@ -978,14 +978,20 @@ def session_summary(request, session_id: UUID):
     moment_ids.update(question_moments.values_list("id", flat=True))
     moment_ids.update(hardest_moments.values_list("id", flat=True))
 
-    moments_qs = ImportantMoment.objects.filter(id__in=list(moment_ids)).order_by(
-        "created_at"
+    moments_qs = (
+        ImportantMoment.objects.filter(id__in=list(moment_ids))
+        .select_related("question")
+        .order_by("created_at")
     )
     moments_data = [
         {
             "id": m.id,
             "trigger": m.trigger,
-            "note": m.note,
+            "note": (
+                m.question.cleaned_text
+                if m.trigger == "QUESTION" and m.question
+                else m.note
+            ),
             "capture_url": m.screenshot_image.url if m.screenshot_image else None,
             "created_at": timezone.localtime(m.created_at).isoformat(),
             "question_id": m.question_id,
