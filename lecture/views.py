@@ -14,6 +14,8 @@ from drf_spectacular.utils import (
     OpenApiResponse,
     extend_schema,
 )
+from .ai.clean import clean_question
+from .ai.answer import answer_question
 
 from .models import (
     Course,
@@ -75,22 +77,44 @@ def get_session_group_name(session_id: UUID | str, role: str) -> str:
     return f"session_{session_id}_{role}"
 
 
-# 더미 AI 함수
-
+# AI 헬퍼 함수
 def ai_clean_question(original_text: str, screenshot_url: str | None = None) -> str:
     """
     텍스트 + (옵션) PPT 캡처 기반으로 질문을 정제.
+
+    실제 구현은 Gemini 기반 LLM을 호출하며, 오류 발생 시 원본 텍스트를 그대로 반환합니다.
     """
-    # TODO: 실제 AI 모델 구현
-    return original_text.strip()
+    try:
+        cleaned = clean_question(
+            question=original_text,
+            image_path=screenshot_url,
+            subject_name=None,  # 필요하면 session.course.name 등을 넘겨서 튜닝 가능
+            temperature=0.3,
+        )
+        return cleaned
+    except Exception:
+        # TODO: logger 사용 시 예외 로깅 추가
+        return original_text.strip()
 
 
 def ai_answer_question(cleaned_text: str, screenshot_url: str | None = None) -> str:
     """
     정제된 질문 + (옵션) PPT 캡처 기반으로 답변.
+
+    실제 구현은 Gemini 기반 LLM을 호출하며, 오류 발생 시 사용자 친화적인 기본 안내 메시지를 반환합니다.
     """
-    dummy_answer = "AI 조교: 아직 실제 모델은 붙지 않았지만, 여기에서 개념을 다시 설명해 줄 수 있습니다."
-    return dummy_answer
+    try:
+        answer = answer_question(
+            question=cleaned_text,
+            lecture_context=None,  # 나중에 세션 요약/중요 구간 등을 넣어 맥락 풍부화 가능
+            image_path=screenshot_url,
+            subject_name=None,
+            temperature=0.7,
+        )
+        return answer
+    except Exception:
+        # TODO: logger 사용 시 예외 로깅 추가
+        return "AI 조교가 현재 답변을 생성할 수 없습니다. 잠시 후 다시 시도해 주세요."
 
 
 # ------------------------
