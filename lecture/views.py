@@ -649,9 +649,9 @@ def mark_important(request, session_id: UUID):
     # -----------------------------
     auto_summary: str | None = None
     if screenshot and getattr(moment, "screenshot_image", None):
-        image_path = getattr(moment.screenshot_image, "path", None)
+        image_url = getattr(moment.screenshot_image, "url", None)
         auto_summary = ai_summarize_important_image(
-            image_path=image_path,
+            image_path=image_url,
             subject_name=session.course.code[:7],
         )
 
