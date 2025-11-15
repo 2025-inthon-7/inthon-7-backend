@@ -4,6 +4,12 @@ import json
 from typing import Any, Dict
 
 from channels.generic.websocket import AsyncWebsocketConsumer
+from django.conf import settings
+
+try:
+    import redis.asyncio as redis  # type: ignore
+except Exception:  # pragma: no cover - 개발 환경에서 redis 미설치 대비
+    redis = None
 
 
 class SessionConsumer(AsyncWebsocketConsumer):
@@ -34,15 +40,32 @@ class SessionConsumer(AsyncWebsocketConsumer):
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
 
+        # 교수 접속 여부를 Redis에 기록 (멀티 프로세스/서버에서도 일관되게 확인 가능)
+        if self.role == "teacher":
+            await self._mark_teacher_connected()
+            # 옵션: 학생 그룹에 "교수 온라인" 상태 브로드캐스트 가능
+            await self._broadcast_teacher_presence()
+
+        # 학생이 처음 접속할 때, 현재 교수 온라인 여부를 함께 내려줌
+        teacher_online = False
+        if self.role == "student":
+            teacher_online = await self._is_teacher_online()
+
         await self.send_json(
             {
                 "event": "connected",
                 "session_id": self.session_id,
                 "role": self.role,
+                "teacher_online": teacher_online,
             }
         )
 
     async def disconnect(self, close_code: int) -> None:
+        # 교수인 경우, 접속 해제 시 Redis 상태 업데이트
+        if getattr(self, "role", None) == "teacher":
+            await self._mark_teacher_disconnected()
+            await self._broadcast_teacher_presence()
+
         await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
     async def receive(
@@ -154,3 +177,77 @@ class SessionConsumer(AsyncWebsocketConsumer):
 
     async def send_json(self, data: Dict[str, Any]) -> None:
         await self.send(text_data=json.dumps(data))
+
+    # ------------------------------------------------------------------
+    # 교수 접속 여부 관련 유틸
+    # ------------------------------------------------------------------
+
+    @property
+    def _redis(self):
+        """
+        RedisChannelLayer와 동일한 Redis 인스턴스를 사용해
+        '교수 접속 여부'를 저장/조회하기 위한 클라이언트.
+        """
+        if redis is None:
+            return None
+        if not hasattr(self, "__redis_client"):
+            url = getattr(settings, "REDIS_URL", "redis://127.0.0.1:6379/0")
+            setattr(self, "__redis_client", redis.from_url(url))
+        return getattr(self, "__redis_client")
+
+    async def _mark_teacher_connected(self) -> None:
+        """
+        현재 세션에 교수(teacher)가 접속했음을 Redis에 기록.
+        여러 프로세스 / 서버에서 동시에 접근해도 일관되게 관리 가능.
+        """
+        if self._redis is None:
+            return
+        key = f"session:{self.session_id}:teachers"
+        await self._redis.sadd(key, self.channel_name)
+
+    async def _mark_teacher_disconnected(self) -> None:
+        """
+        현재 세션에서 해당 교수 connection을 제거.
+        """
+        if self._redis is None:
+            return
+        key = f"session:{self.session_id}:teachers"
+        await self._redis.srem(key, self.channel_name)
+
+    async def _is_teacher_online(self) -> bool:
+        """
+        현재 세션에 교수(teacher)가 하나 이상 접속해 있는지 여부.
+        - WebSocket 핸들러나 REST API(별도 view에서 동일 키를 사용)에서 재활용 가능.
+        """
+        if self._redis is None:
+            return False
+        key = f"session:{self.session_id}:teachers"
+        count = await self._redis.scard(key)
+        return bool(count and count > 0)
+
+    async def _broadcast_teacher_presence(self) -> None:
+        """
+        교수 접속 여부가 변할 때마다 학생 그룹에 브로드캐스트하고 싶을 경우 사용하는 유틸.
+        프론트에서 받아서 '교수 온라인/오프라인' 표시 가능.
+        """
+        is_online = await self._is_teacher_online()
+        # 학생 그룹 이름은 session_<session_id>_student
+        student_group = f"session_{self.session_id}_student"
+        await self.channel_layer.group_send(
+            student_group,
+            {
+                "type": "teacher_presence",
+                "is_online": is_online,
+            },
+        )
+
+    async def teacher_presence(self, event: Dict[str, Any]) -> None:
+        """
+        학생 클라이언트가 받는 '교수 접속 여부' 이벤트.
+        """
+        await self.send_json(
+            {
+                "event": "teacher_presence",
+                "is_online": event.get("is_online", False),
+            }
+        )
