@@ -566,22 +566,19 @@ def mark_important(request, session_id: UUID):
 @api_view(["POST"])
 def hard_threshold_capture(request, session_id: UUID):
     """
-    프론트(교수): HARD 비율 threshold 넘었다고 판단했을 때
+    교수(프론트): HARD가 threshold 넘었다고 판단했을 때
 
     multipart/form-data:
       - screenshot (필수)
-      - hard_ratio (선택, string/float)
 
     Path parameters:
     - `id` (integer): 세션 ID
 
     Request body (multipart/form-data):
     - `screenshot` (file, required): PPT 캡처 이미지
-    - `hard_ratio` (string/float, optional): 예: "0.35"
     """
     session = get_object_or_404(Session, id=session_id, is_active=True)
     screenshot = request.FILES.get("screenshot")
-    hard_ratio = request.data.get("hard_ratio")
 
     if not screenshot:
         return Response(
@@ -589,7 +586,9 @@ def hard_threshold_capture(request, session_id: UUID):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    note = f"hard_ratio={hard_ratio}" if hard_ratio else ""
+    # note는 현재 별도 입력 없이 빈 문자열로 저장
+    note = ""
+
     moment = ImportantMoment.objects.create(
         session=session,
         trigger="HARD",
@@ -602,7 +601,6 @@ def hard_threshold_capture(request, session_id: UUID):
     payload = {
         "type": "hard_alert",
         "capture_url": capture_url,
-        "hard_ratio": float(hard_ratio) if hard_ratio is not None else None,
     }
 
     # 학생 + 교수 둘 다에게 알림
@@ -616,7 +614,7 @@ def hard_threshold_capture(request, session_id: UUID):
     )
 
     return Response(
-        {"id": moment.id, "capture_url": capture_url, "hard_ratio": hard_ratio},
+        {"id": moment.id, "capture_url": capture_url},
         status=status.HTTP_201_CREATED,
     )
 
@@ -629,7 +627,7 @@ def hard_threshold_capture(request, session_id: UUID):
     responses=SessionSummarySerializer,
 )
 @api_view(["GET"])
-def session_summary(request, session_id: int):
+def session_summary(request, session_id: UUID):
     """
     수업 Summary
 
