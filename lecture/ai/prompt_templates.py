@@ -14,9 +14,9 @@ def get_subject_info(subject_name: Optional[str] = None) -> str:
     Args:
         subject_name: 과목 코드 또는 이름 (예: "COSE213", "자료구조" 등)
                       None이거나 매칭되는 레코드가 없으면 빈 문자열 반환
-
+    
     Returns:
-        과목 정보(설명) 문자열 (없으면 빈 문자열)
+        과목 정보 문자열 (학수번호와 설명 포함, 없으면 빈 문자열)
     """
     if not subject_name or not subject_name.strip():
         return ""
@@ -36,8 +36,15 @@ def get_subject_info(subject_name: Optional[str] = None) -> str:
 
     if not subject:
         return ""
-
-    return subject.description or ""
+    
+    # 과목명(subject.name)과 설명을 함께 반환
+    result_parts = []
+    if subject.name:
+        result_parts.append(f"과목명: {subject.name}")
+    if subject.description:
+        result_parts.append(subject.description)
+    
+    return "\n".join(result_parts) if result_parts else "" # "name:description"꼴로 반환
 
 
 # 질문 알잘딱 프롬프트 템플릿
