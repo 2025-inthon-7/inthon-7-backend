@@ -474,10 +474,13 @@ def submit_question_text(request, question_id: int):
         moment.screenshot_image.url if moment and moment.screenshot_image else None
     )
 
+    no_capture = request.data.get("no_capture") is True
+    final_screenshot_url = None if no_capture else screenshot_url
+
     # clean만 수행 (이미지까지 같이 줌)
     cleaned = ai_clean_question(
         original_text,
-        screenshot_url,
+        final_screenshot_url,
         subject_name=question.session.course.code[:7],
     )
     question.cleaned_text = cleaned
@@ -543,10 +546,13 @@ def request_ai_answer(request, question_id: int):
         moment.screenshot_image.url if moment and moment.screenshot_image else None
     )
 
+    no_capture = request.data.get("no_capture") is True
+    final_screenshot_url = None if no_capture else screenshot_url
+
     # AI 답변 호출
     answer = ai_answer_question(
         cleaned_for_answer,
-        screenshot_url,
+        final_screenshot_url,
         subject_name=question.session.course.code[:7],
     )
 

@@ -104,6 +104,7 @@ class QuestionCaptureUploadSerializer(serializers.Serializer):
 
 class QuestionTextSubmitSerializer(serializers.Serializer):
     original_text = serializers.CharField()
+    no_capture = serializers.BooleanField(required=False, default=False)
 
 
 class QuestionTextResponseSerializer(serializers.Serializer):
@@ -115,6 +116,7 @@ class QuestionTextResponseSerializer(serializers.Serializer):
 
 class QuestionOverrideRequestSerializer(serializers.Serializer):
     override_cleaned_text = serializers.CharField(required=False, allow_blank=True)
+    no_capture = serializers.BooleanField(required=False, default=False)
 
 
 class AIAnswerResponseSerializer(serializers.Serializer):
