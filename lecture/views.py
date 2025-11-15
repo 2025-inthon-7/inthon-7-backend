@@ -141,20 +141,27 @@ def ai_summarize_important_image(
 
     summarize_image 모듈을 thin-wrapper로 감싸고, 오류 시 None을 반환합니다.
     """
+    print("[AI DEBUG] ai_summarize_important_image called",
+          "image_path =", image_path,
+          "subject_name =", subject_name)
+
     if not image_path:
+        print("[AI DEBUG] ai_summarize_important_image: no image_path, skipping LLM")
         return None
 
     try:
+        print("[AI DEBUG] ai_summarize_important_image: calling summarize_important_image")
         summary = summarize_important_image(
             image_path=image_path,
             subject_name=subject_name,
             temperature=0.3,
         )
         summary = summary.strip()
+        print("[AI DEBUG] ai_summarize_important_image: summary =", summary[:200])
         return summary or None
     except Exception as e:
         # TODO: print 대신 logger 사용
-        print(f"Error in ai_summarize_important_image: {e}")
+        print("[AI DEBUG] ai_summarize_important_image ERROR:", e)
         return None
 
 
@@ -633,6 +640,12 @@ def mark_important(request, session_id: UUID):
     # 사용자가 직접 입력한 메모 (optional)
     raw_note = request.data.get("note", "") or ""
     screenshot = request.FILES.get("screenshot")
+    print(
+        "[AI DEBUG] mark_important called",
+        "session_id =", session_id,
+        "has_screenshot =", bool(screenshot),
+        "raw_note =", raw_note,
+    )
 
     # 1차로 ImportantMoment를 생성해서 파일을 디스크에 저장
     moment = ImportantMoment.objects.create(
@@ -643,6 +656,11 @@ def mark_important(request, session_id: UUID):
     )
 
     capture_url = moment.screenshot_image.url if screenshot else None
+    print(
+        "[AI DEBUG] mark_important saved ImportantMoment",
+        "id =", moment.id,
+        "capture_url =", capture_url,
+    )
 
     # -----------------------------
     # 이미지 기반 1줄 요약 생성 (동기 처리)
@@ -650,9 +668,19 @@ def mark_important(request, session_id: UUID):
     auto_summary: str | None = None
     if screenshot and getattr(moment, "screenshot_image", None):
         image_url = getattr(moment.screenshot_image, "url", None)
+        print(
+            "[AI DEBUG] mark_important before ai_summarize_important_image",
+            "image_url =", image_url,
+        )
         auto_summary = ai_summarize_important_image(
             image_path=image_url,
             subject_name=session.course.code[:7],
+        )
+    else:
+        print(
+            "[AI DEBUG] mark_important: skipping ai_summarize_important_image",
+            "screenshot_exists =", bool(screenshot),
+            "moment_has_image =", bool(getattr(moment, "screenshot_image", None)),
         )
 
     # note와 자동 요약 결합 로직
@@ -662,6 +690,12 @@ def mark_important(request, session_id: UUID):
         final_note = auto_summary
     else:
         final_note = raw_note
+
+    print(
+        "[AI DEBUG] mark_important final_note decided",
+        "auto_summary_present =", bool(auto_summary),
+        "final_note =", final_note,
+    )
 
     if final_note != moment.note:
         moment.note = final_note
