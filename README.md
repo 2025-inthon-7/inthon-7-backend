@@ -88,7 +88,6 @@
 - **teacher + student 모두에게 가는 이벤트 (교수, 학생 모두 수신)**
   - `new_question` — 학생의 질문 + 캡처가 모두에게 공유됨
   - `question_like_update` — '나도 궁금해요' 카운트 업데이트
-  - `hard_alert` — “어려워요” 비율이 threshold 를 넘은 구간
   - `session_ended` — 강의(세션) 종료
 
 
