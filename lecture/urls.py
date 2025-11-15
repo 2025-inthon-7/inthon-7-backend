@@ -10,16 +10,16 @@ urlpatterns = [
         name="get_today_session",
     ),
 
-    # Feedback
+    # Feedback (Session UUID)
     path(
-        "sessions/<int:session_id>/feedback/",
+        "sessions/<uuid:session_id>/feedback/",
         views.submit_feedback,
         name="submit_feedback",
     ),
 
     # Question flow
     path(
-        "sessions/<int:session_id>/questions/intent/",
+        "sessions/<uuid:session_id>/questions/intent/",
         views.start_question_intent,
         name="start_question_intent",
     ),
@@ -44,26 +44,26 @@ urlpatterns = [
         name="forward_question_to_professor",
     ),
     path(
-        "sessions/<int:session_id>/questions/",
+        "sessions/<uuid:session_id>/questions/",
         views.list_session_questions,
         name="list_session_questions",
     ),
 
     # '중요해요' + HARD capture
     path(
-        "sessions/<int:session_id>/important/",
+        "sessions/<uuid:session_id>/important/",
         views.mark_important,
         name="mark_important",
     ),
     path(
-        "sessions/<int:session_id>/hard-threshold-capture/",
+        "sessions/<uuid:session_id>/hard-threshold-capture/",
         views.hard_threshold_capture,
         name="hard_threshold_capture",
     ),
 
     # Summary
     path(
-        "sessions/<int:session_id>/summary/",
+        "sessions/<uuid:session_id>/summary/",
         views.session_summary,
         name="session_summary",
     ),

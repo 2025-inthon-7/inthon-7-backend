@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import timedelta
-
+from uuid import UUID
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.shortcuts import get_object_or_404
@@ -68,7 +68,7 @@ def get_or_create_today_session_by_course_code(course_code: str) -> Session:
     return session
 
 
-def get_session_group_name(session_id: int, role: str) -> str:
+def get_session_group_name(session_id: UUID | str, role: str) -> str:
     """
     WebSocket 그룹 이름 (role: teacher or student)
     """
@@ -140,7 +140,7 @@ def get_today_session(request, course_code: str):
     },
 )
 @api_view(["POST"])
-def submit_feedback(request, session_id: int):
+def submit_feedback(request, session_id: UUID):
     """
     학생: OK/HARD 피드백
 
@@ -201,7 +201,7 @@ def submit_feedback(request, session_id: int):
     responses=QuestionIntentResponseSerializer,
 )
 @api_view(["POST"])
-def start_question_intent(request, session_id: int):
+def start_question_intent(request, session_id: UUID):
     """
     학생: '질문하기' 버튼 눌렀을 때 호출.
     아직 질문 내용을 모르고, '질문 하나 시작'만 알리는 단계.
@@ -471,7 +471,7 @@ def forward_question_to_professor(request, question_id: int):
     responses=QuestionSerializer(many=True),
 )
 @api_view(["GET"])
-def list_session_questions(request, session_id: int):
+def list_session_questions(request, session_id: UUID):
     """
     교수: 세션 질문 목록
 
@@ -502,7 +502,7 @@ def list_session_questions(request, session_id: int):
     responses=QuestionCaptureResponseSerializer,
 )
 @api_view(["POST"])
-def mark_important(request, session_id: int):
+def mark_important(request, session_id: UUID):
     """
     교수: '중요해요' + PPT 캡쳐
 
@@ -553,7 +553,7 @@ def mark_important(request, session_id: int):
     responses=HardThresholdCaptureResponseSerializer,
 )
 @api_view(["POST"])
-def hard_threshold_capture(request, session_id: int):
+def hard_threshold_capture(request, session_id: UUID):
     """
     프론트(교수): HARD 비율 threshold 넘었다고 판단했을 때
 

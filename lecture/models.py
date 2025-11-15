@@ -1,4 +1,5 @@
 from django.db import models
+import uuid
 
 class Course(models.Model):
     code = models.CharField(max_length=50, unique=True)
@@ -7,6 +8,12 @@ class Course(models.Model):
     time = models.CharField(max_length=100)
 
 class Session(models.Model):
+    # UUID를 기본 키로 사용
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
     course = models.ForeignKey(Course, on_delete=models.CASCADE)
     date = models.DateField()
     is_active = models.BooleanField(default=True)
