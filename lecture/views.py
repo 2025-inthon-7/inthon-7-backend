@@ -956,7 +956,11 @@ def session_summary(request, session_id: UUID):
     total_hard = feedback_qs.filter(feedback_type="HARD").count()
 
     # 질문 집계
-    questions_qs = Question.objects.filter(session=session)
+    # 1. 전체 질문 개수
+    questions_qs = Question.objects.filter(
+        session=session,
+        status__in=[Question.Status.FORWARDED, Question.Status.PROFESSOR_ANSWERED],
+    )
     question_count = questions_qs.count()
 
 
@@ -970,15 +974,11 @@ def session_summary(request, session_id: UUID):
         Question.Status.PROFESSOR_ANSWERED,
     ]
     top_questions = (
-        Question.objects.filter(session=session)
+        Question.objects.filter(session=session, status__in=prioritized_statuses)
         .annotate(
             like_count=Count("likes"),
-            priority=Case(
-                When(status__in=prioritized_statuses, then=1),
-                default=2,
-            ),
         )
-        .order_by("priority", "-like_count", "created_at")[:5]
+        .order_by("-like_count", "created_at")[:5]
     )
     top_question_ids = [q.id for q in top_questions]
     question_moments = ImportantMoment.objects.filter(
